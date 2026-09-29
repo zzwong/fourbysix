@@ -84,6 +84,30 @@ func TestFormObjectMatrix(t *testing.T) {
 	}
 }
 
+// TestNestedFormObjectMatrix places a 50x50 form at (20, 30) inside a form
+// placed at (100, 100): the rect must land at (120,130)-(170,180) in PDF
+// space, which only works when the two placement matrices are composed.
+func TestNestedFormObjectMatrix(t *testing.T) {
+	data := mustWrite(t, []testpdf.Page{{
+		Forms: []testpdf.FormSpec{{
+			Matrix: [6]float64{1, 0, 0, 1, 100, 100},
+			Inner:  &testpdf.FormSpec{Matrix: [6]float64{1, 0, 0, 1, 20, 30}},
+		}},
+	}})
+	d := openBytes(t, data)
+	graphics, _, err := d.Regions(0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(graphics) != 1 {
+		t.Fatalf("got %d graphics, want 1: %v", len(graphics), graphics)
+	}
+	want := layout.Rect{X0: 120, Y0: 792 - 180, X1: 170, Y1: 792 - 130}
+	if graphics[0] != want {
+		t.Errorf("nested form graphic = %v, want %v", graphics[0], want)
+	}
+}
+
 // TestMatrixComposition covers the form-matrix math without needing nested
 // form fixtures: composing two translations must equal their sum, and the
 // bbox of a rect through a scale/translate matrix must land on the mapped

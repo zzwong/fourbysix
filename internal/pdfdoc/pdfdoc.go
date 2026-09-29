@@ -172,7 +172,9 @@ func (m matrix) bbox(x0, y0, x1, y1 float64) (float64, float64, float64, float64
 	return minX, minY, maxX, maxY
 }
 
-func (m matrix) formMatrix(obj references.FPDF_PAGEOBJECT, inst pdfium.Pdfium) (matrix, error) {
+// objectMatrix reads an object's placement matrix, which for a form maps
+// form space into its parent's space.
+func objectMatrix(inst pdfium.Pdfium, obj references.FPDF_PAGEOBJECT) (matrix, error) {
 	res, err := inst.FPDFPageObj_GetMatrix(&requests.FPDFPageObj_GetMatrix{PageObject: obj})
 	if err != nil {
 		return matrix{}, err
@@ -307,6 +309,10 @@ func (d *Doc) pathGeometryBounds(obj references.FPDF_PAGEOBJECT) (float64, float
 	}
 	return minX, minY, maxX, maxY, nil
 }
+
+// walkFrom reports obj, or every leaf inside it when obj is a form, with
+// bounds mapped to page space through acc, the product of the placement
+// matrices of the forms that enclose obj.
 func (d *Doc) walkFrom(obj references.FPDF_PAGEOBJECT, acc matrix, fn func(Object, references.FPDF_PAGEOBJECT) error) error {
 	typRes, err := d.inst.FPDFPageObj_GetType(&requests.FPDFPageObj_GetType{PageObject: obj})
 	if err != nil {
@@ -321,10 +327,11 @@ func (d *Doc) walkFrom(obj references.FPDF_PAGEOBJECT, acc matrix, fn func(Objec
 		return fn(Object{Type: typRes.Type, Left: lx, Bottom: by, Right: rx, Top: ty}, obj)
 	}
 
-	m, err := acc.formMatrix(obj, d.inst)
+	placement, err := objectMatrix(d.inst, obj)
 	if err != nil {
 		return err
 	}
+	m := compose(acc, placement)
 	countRes, err := d.inst.FPDFFormObj_CountObjects(&requests.FPDFFormObj_CountObjects{PageObject: obj})
 	if err != nil {
 		return err

@@ -44,11 +44,13 @@ type ImageSpec struct {
 // FormSpec places a form XObject whose content is a black rect filling the
 // form space, filled by default or stroked with Stroke. Matrix maps form
 // space to page space (bottom-left origin), so 1 0 0 1 100 100 translates by
-// (100, 100).
+// (100, 100). With Inner set, the form draws the inner form (placed by the
+// inner Matrix in this form's space) instead of a rect.
 type FormSpec struct {
 	Matrix       [6]float64
 	FormW, FormH float64
 	Stroke       bool
+	Inner        *FormSpec
 }
 
 // Page is one page of the fixture.
@@ -83,7 +85,7 @@ func Write(pages []Page) ([]byte, error) {
 			images = append(images, b.imageObj(im.Gray))
 		}
 		for _, f := range p.Forms {
-			forms = append(forms, b.formObj(f.FormW, f.FormH, f.Stroke))
+			forms = append(forms, b.formObj(f))
 		}
 		resources := b.resources(font, images, forms)
 		content := b.streamObj(buildContent(w, h, p))
@@ -220,18 +222,30 @@ func (b *builder) imageObj(gray uint8) int {
 }
 
 // formObj writes a form XObject whose content is a black rect filling the
-// form space. The page content stream decides the placement matrix, not the
-// form itself.
-func (b *builder) formObj(w, h float64, stroke bool) int {
+// form space, or the inner form. The content stream that draws a form decides
+// its placement matrix, not the form itself.
+func (b *builder) formObj(f FormSpec) int {
+	w, h := f.FormW, f.FormH
 	if w == 0 || h == 0 {
 		w, h = 50, 50
 	}
-	op := "f"
-	if stroke {
-		op = "S"
+	var content, resources string
+	if f.Inner != nil {
+		inner := b.formObj(*f.Inner)
+		m := f.Inner.Matrix
+		content = fmt.Sprintf("q %g %g %g %g %g %g cm /Fm0 Do Q\n", m[0], m[1], m[2], m[3], m[4], m[5])
+		resources = fmt.Sprintf("<< /XObject << /Fm0 %d 0 R >> >>", inner)
+		// The outer BBox clips the inner form, so it must cover the whole page.
+		w, h = 10000, 10000
+	} else {
+		op := "f"
+		if f.Stroke {
+			op = "S"
+		}
+		content = fmt.Sprintf("0 0 %g %g re %s\n", w, h, op)
+		resources = "<< >>"
 	}
-	content := fmt.Sprintf("0 0 %g %g re %s\n", w, h, op)
-	dict := fmt.Sprintf("/Type /XObject /Subtype /Form /BBox [0 0 %g %g] /Resources << >>", w, h)
+	dict := fmt.Sprintf("/Type /XObject /Subtype /Form /BBox [0 0 %g %g] /Resources %s", w, h, resources)
 	full := fmt.Sprintf("<< %s /Length %d >>\nstream\n", dict, len(content))
 	data := append([]byte(full), content...)
 	data = append(data, '\n', 'e', 'n', 'd', 's', 't', 'r', 'e', 'a', 'm')
