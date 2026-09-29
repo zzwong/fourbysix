@@ -41,12 +41,14 @@ type ImageSpec struct {
 	Gray           uint8
 }
 
-// FormSpec places a form XObject whose content is a black filled rect
-// filling the form space. Matrix maps form space to page space (bottom-left
-// origin), so 1 0 0 1 100 100 translates by (100, 100).
+// FormSpec places a form XObject whose content is a black rect filling the
+// form space, filled by default or stroked with Stroke. Matrix maps form
+// space to page space (bottom-left origin), so 1 0 0 1 100 100 translates by
+// (100, 100).
 type FormSpec struct {
 	Matrix       [6]float64
 	FormW, FormH float64
+	Stroke       bool
 }
 
 // Page is one page of the fixture.
@@ -81,7 +83,7 @@ func Write(pages []Page) ([]byte, error) {
 			images = append(images, b.imageObj(im.Gray))
 		}
 		for _, f := range p.Forms {
-			forms = append(forms, b.formObj(f.FormW, f.FormH))
+			forms = append(forms, b.formObj(f.FormW, f.FormH, f.Stroke))
 		}
 		resources := b.resources(font, images, forms)
 		content := b.streamObj(buildContent(w, h, p))
@@ -217,14 +219,18 @@ func (b *builder) imageObj(gray uint8) int {
 	return b.add(data)
 }
 
-// formObj writes a form XObject whose content is a black filled rect filling
-// the form space. The page content stream decides the placement matrix, not
-// the form itself.
-func (b *builder) formObj(w, h float64) int {
+// formObj writes a form XObject whose content is a black rect filling the
+// form space. The page content stream decides the placement matrix, not the
+// form itself.
+func (b *builder) formObj(w, h float64, stroke bool) int {
 	if w == 0 || h == 0 {
 		w, h = 50, 50
 	}
-	content := fmt.Sprintf("0 0 %g %g re f\n", w, h)
+	op := "f"
+	if stroke {
+		op = "S"
+	}
+	content := fmt.Sprintf("0 0 %g %g re %s\n", w, h, op)
 	dict := fmt.Sprintf("/Type /XObject /Subtype /Form /BBox [0 0 %g %g] /Resources << >>", w, h)
 	full := fmt.Sprintf("<< %s /Length %d >>\nstream\n", dict, len(content))
 	data := append([]byte(full), content...)
