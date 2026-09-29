@@ -106,6 +106,38 @@ func TestMatrixComposition(t *testing.T) {
 	}
 }
 
+// TestStrokedPathInFormGeometry checks that a stroked path inside a form is
+// measured by its geometry and that the form placement is applied exactly
+// once (the path matrix is local to the form; the form matrix composes on
+// top of it). A double transform would land the rect at (200,542).
+func TestStrokedPathInFormGeometry(t *testing.T) {
+	data := mustWrite(t, []testpdf.Page{{
+		Forms: []testpdf.FormSpec{{
+			Matrix: [6]float64{1, 0, 0, 1, 100, 100},
+			FormW:  50,
+			FormH:  50,
+			Stroke: true,
+		}},
+	}})
+	d := openBytes(t, data)
+	graphics, text, err := d.Regions(0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(text) != 0 {
+		t.Errorf("unexpected text rects: %v", text)
+	}
+	if len(graphics) != 1 {
+		t.Fatalf("got %d graphics, want 1: %v", len(graphics), graphics)
+	}
+	want := layout.Rect{X0: 100, Y0: 792 - 150, X1: 150, Y1: 792 - 100}
+	got := graphics[0]
+	if abs(got.X0-want.X0) > 0.01 || abs(got.Y0-want.Y0) > 0.01 ||
+		abs(got.X1-want.X1) > 0.01 || abs(got.Y1-want.Y1) > 0.01 {
+		t.Fatalf("stroked form path = %v, want %v", got, want)
+	}
+}
+
 func TestObjectTypes(t *testing.T) {
 	data := mustWrite(t, []testpdf.Page{{
 		Rects:   []testpdf.RectSpec{testpdf.Rect(10, 10, 100, 100)},
@@ -149,8 +181,8 @@ func TestAmazonShapedFixture(t *testing.T) {
 	}
 
 	expected := [][]layout.Rect{
-		{}, // page 1: text-only instructions page, skipped
-		{{X0: 28, Y0: 28, X1: 584, Y1: 406}},             // UPS label box
+		{},                                   // page 1: text-only instructions page, skipped
+		{{X0: 28, Y0: 28, X1: 584, Y1: 406}}, // UPS label box
 		{ // UN3481 battery label and RMA slip
 			{X0: 116, Y0: 28, X1: 498, Y1: 380},
 			{X0: 28, Y0: 463, X1: 585, Y1: 689},
@@ -250,7 +282,7 @@ func amazonFixture() []testpdf.Page {
 	// Page 3: hazmat label, separator rule, barcode and stroked table.
 	hazmat := border(116, 28, 498, 380)
 	table := []testpdf.RectSpec{
-		testpdf.Rect(28, 608, 585, 689), // stroked border below
+		testpdf.Rect(28, 608, 585, 689),               // stroked border below
 		testpdf.RectColor(30, 610, 583, 687, 1, 1, 1), // white fill: paints nothing
 		gray(29, 633, 521, 634),
 		gray(521, 633, 583, 634),

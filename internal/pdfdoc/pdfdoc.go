@@ -232,21 +232,92 @@ func (d *Doc) walkObjects(page int, fn func(obj Object, ref references.FPDF_PAGE
 	return nil
 }
 
-// walkFrom recurses into a form (transforming child bounds with the
-// accumulated matrix, composing nested forms) or reports a leaf object.
-// Child objects of a form arrive in the form's own coordinate space, so
-// every level past the page must run its bounds through the matrix.
+// leafBounds returns a non-form object's bounds in its parent's PDF space.
+// A stroked path uses its geometry instead of FPDFPageObj_GetBounds, which
+// inflates the box by the stroke extent; PyMuPDF (and therefore the Python
+// tool) measures the path itself, and the difference is enough to change the
+// reported label size.
+func (d *Doc) leafBounds(typ enums.FPDF_PAGEOBJ, obj references.FPDF_PAGEOBJECT) (float64, float64, float64, float64, error) {
+	if typ == enums.FPDF_PAGEOBJ_PATH {
+		if dm, err := d.inst.FPDFPath_GetDrawMode(&requests.FPDFPath_GetDrawMode{PageObject: obj}); err == nil && dm.Stroke {
+			if x0, y0, x1, y1, err := d.pathGeometryBounds(obj); err == nil {
+				return x0, y0, x1, y1, nil
+			}
+		}
+	}
+	b, err := d.inst.FPDFPageObj_GetBounds(&requests.FPDFPageObj_GetBounds{PageObject: obj})
+	if err != nil {
+		return 0, 0, 0, 0, err
+	}
+	return float64(b.Left), float64(b.Bottom), float64(b.Right), float64(b.Top), nil
+}
+
+// pathGeometryBounds maps every path segment endpoint (and Bezier control
+// point, which PyMuPDF also counts) through the object's matrix and returns
+// the bounding box in the parent's PDF space.
+func (d *Doc) pathGeometryBounds(obj references.FPDF_PAGEOBJECT) (float64, float64, float64, float64, error) {
+	m, err := d.inst.FPDFPageObj_GetMatrix(&requests.FPDFPageObj_GetMatrix{PageObject: obj})
+	if err != nil {
+		return 0, 0, 0, 0, err
+	}
+	count, err := d.inst.FPDFPath_CountSegments(&requests.FPDFPath_CountSegments{PageObject: obj})
+	if err != nil {
+		return 0, 0, 0, 0, err
+	}
+
+	var minX, minY, maxX, maxY float64
+	first := true
+	add := func(x, y float64) {
+		tx := float64(m.Matrix.A)*x + float64(m.Matrix.C)*y + float64(m.Matrix.E)
+		ty := float64(m.Matrix.B)*x + float64(m.Matrix.D)*y + float64(m.Matrix.F)
+		if first {
+			minX, minY, maxX, maxY = tx, ty, tx, ty
+			first = false
+			return
+		}
+		minX, minY = min(minX, tx), min(minY, ty)
+		maxX, maxY = max(maxX, tx), max(maxY, ty)
+	}
+
+	for i := 0; i < count.Count; i++ {
+		seg, err := d.inst.FPDFPath_GetPathSegment(&requests.FPDFPath_GetPathSegment{PageObject: obj, Index: i})
+		if err != nil {
+			return 0, 0, 0, 0, err
+		}
+		pt, err := d.inst.FPDFPathSegment_GetPoint(&requests.FPDFPathSegment_GetPoint{PathSegment: seg.PathSegment})
+		if err != nil {
+			return 0, 0, 0, 0, err
+		}
+		add(float64(pt.X), float64(pt.Y))
+
+		typ, err := d.inst.FPDFPathSegment_GetType(&requests.FPDFPathSegment_GetType{PathSegment: seg.PathSegment})
+		if err == nil && typ.Type == enums.FPDF_SEGMENT_BEZIERTO {
+			cp, err := d.inst.FPDFPath_GetBezierControlPoints(&requests.FPDFPath_GetBezierControlPoints{
+				PageObject: obj,
+				Index:      uint64(i),
+			})
+			if err == nil {
+				add(float64(cp.FirstControlPoint.X), float64(cp.FirstControlPoint.Y))
+				add(float64(cp.SecondControlPoint.X), float64(cp.SecondControlPoint.Y))
+			}
+		}
+	}
+	if first {
+		return 0, 0, 0, 0, errors.New("path has no segments")
+	}
+	return minX, minY, maxX, maxY, nil
+}
 func (d *Doc) walkFrom(obj references.FPDF_PAGEOBJECT, acc matrix, fn func(Object, references.FPDF_PAGEOBJECT) error) error {
 	typRes, err := d.inst.FPDFPageObj_GetType(&requests.FPDFPageObj_GetType{PageObject: obj})
 	if err != nil {
 		return err
 	}
 	if typRes.Type != enums.FPDF_PAGEOBJ_FORM {
-		b, err := d.inst.FPDFPageObj_GetBounds(&requests.FPDFPageObj_GetBounds{PageObject: obj})
+		left, bottom, right, top, err := d.leafBounds(typRes.Type, obj)
 		if err != nil {
 			return err
 		}
-		lx, by, rx, ty := acc.bbox(float64(b.Left), float64(b.Bottom), float64(b.Right), float64(b.Top))
+		lx, by, rx, ty := acc.bbox(left, bottom, right, top)
 		return fn(Object{Type: typRes.Type, Left: lx, Bottom: by, Right: rx, Top: ty}, obj)
 	}
 
