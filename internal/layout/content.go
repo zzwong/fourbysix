@@ -4,8 +4,8 @@ import "image"
 
 // ContentBBox finds the bounding box of pixels with any channel below the
 // threshold, sampling every max(1, min(w,h)/200) pixels so large pages stay
-// cheap. It is a direct port of the Python _find_content_bbox. The returned
-// rect is in pixel coordinates; ok is false for a blank page.
+// cheap. The returned rect is in pixel coordinates; ok is false for a blank
+// page.
 func ContentBBox(img image.Image, threshold int) (Rect, bool) {
 	b := img.Bounds()
 	w, h := b.Dx(), b.Dy()

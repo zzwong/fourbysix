@@ -7,8 +7,7 @@ import (
 )
 
 // ParsePages turns a page spec like "2-3,5" into zero-based page indexes in
-// the order given, porting the Python _parse_pages: 1-based, ranges are
-// inclusive on both ends, and out-of-range, reversed or non-numeric parts
+// the order given: 1-based, ranges are inclusive on both ends, and out-of-range, reversed or non-numeric parts
 // are errors. An empty spec means all pages in order.
 func ParsePages(spec string, pageCount int) ([]int, error) {
 	if spec == "" {

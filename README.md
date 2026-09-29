@@ -1,8 +1,10 @@
 # fourbysix
 
-Convert any multi-page PDF to label-sized pages with automatic content
-detection, cropping, rotation, and scaling. Go port of the `labelize` Python
-tool.
+Crop shipping and return-label PDFs onto thermal label pages (default 4x6 in)
+with automatic content detection, rotation, and scaling. `--split` pulls
+several labels off one page, such as the UPS label, lithium battery label and
+return slip that Amazon's return center prints on letter paper, and drops the
+instructions around them.
 
 ```sh
 fourbysix input.pdf

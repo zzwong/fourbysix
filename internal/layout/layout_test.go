@@ -6,7 +6,7 @@ import (
 	"testing"
 )
 
-// ── Rotation logic tests (port of Python TestRotation) ──────────────────
+// ── Rotation logic tests ──────────────────────────────────────────────
 
 var label4x6 = [2]float64{4 * 72, 6 * 72}
 var label6x4 = [2]float64{6 * 72, 4 * 72}
@@ -41,7 +41,7 @@ func TestShouldRotate(t *testing.T) {
 	}
 }
 
-// ── Content detection tests (port of Python TestContentDetection) ───────
+// ── Content detection tests ──────────────────────────────────────────────
 
 func whiteImage(w, h int) *image.RGBA {
 	img := image.NewRGBA(image.Rect(0, 0, w, h))
@@ -100,7 +100,7 @@ func TestContentBBox(t *testing.T) {
 	})
 }
 
-// ── ParsePages tests (port of Python TestParsePages) ────────────────────
+// ── ParsePages tests ──────────────────────────────────────────────
 
 func TestParsePages(t *testing.T) {
 	t.Run("empty spec selects all", func(t *testing.T) {
@@ -138,10 +138,10 @@ func equalInts(a, b []int) bool {
 	return true
 }
 
-// ── Split mode tests (port of Python TestSplit, pure rects) ─────────────
+// ── Split mode tests ──────────────────────────────────────────────
 
 // borderBox returns the four thin filled rects a browser draws for a dashed
-// border, porting the Python _box helper (t = 2 pt).
+// border.
 func borderBox(x0, y0, x1, y1 float64) []Rect {
 	const t = 2
 	return []Rect{
@@ -157,7 +157,7 @@ func page612() Rect { return Rect{X0: 0, Y0: 0, X1: 612, Y1: 792} }
 func TestFindLabelRegions(t *testing.T) {
 	t.Run("heading between boxes separates labels", func(t *testing.T) {
 		// 30 pt gap: close enough to merge if the heading were ignored. The
-		// text block is the real bbox pymupdf reports for 12 pt Helvetica at
+		// text rect is the bbox of a 12 pt Helvetica line at
 		// baseline 398: y0 = 398-12.9, y1 = 398+3.6, clear of box2 at y=410.
 		graphics := append(borderBox(100, 30, 500, 380), Rect{X0: 130, Y0: 410, X1: 480, Y1: 520})
 		text := []Rect{{X0: 30, Y0: 385.1, X1: 162.7, Y1: 401.6}}
@@ -184,7 +184,7 @@ func TestFindLabelRegions(t *testing.T) {
 
 	t.Run("text inside border stays with label", func(t *testing.T) {
 		graphics := append(borderBox(50, 50, 400, 300), Rect{X0: 80, Y0: 200, X1: 300, Y1: 280})
-		// "SHIP TO: 1850 MERCER RD" at (80, 100); the real pymupdf block bbox.
+		// "SHIP TO: 1850 MERCER RD" in 12 pt Helvetica at (80, 100).
 		text := []Rect{{X0: 80, Y0: 87.1, X1: 237.4, Y1: 103.6}}
 		regions := FindLabelRegions(graphics, text, page612())
 		if len(regions) != 1 {

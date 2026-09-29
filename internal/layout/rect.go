@@ -5,7 +5,7 @@
 package layout
 
 // Rect is an axis-aligned rectangle in points with a top-left origin
-// (X0 <= X1, Y0 <= Y1), matching how pymupdf reports page coordinates.
+// (X0 <= X1, Y0 <= Y1).
 type Rect struct {
 	X0, Y0, X1, Y1 float64
 }
@@ -16,9 +16,8 @@ func (r Rect) Width() float64 { return r.X1 - r.X0 }
 // Height returns Y1 - Y0.
 func (r Rect) Height() float64 { return r.Y1 - r.Y0 }
 
-// Clip returns the intersection of two rects. A rect can intersect another
-// in at most one place, so the result is exact: the far edge that comes
-// first on each axis. The result may have zero or negative size.
+// Clip returns the intersection of two rects, which has zero or negative
+// size when they do not overlap.
 func (r Rect) Clip(o Rect) Rect {
 	return Rect{
 		X0: max(r.X0, o.X0),
@@ -44,9 +43,8 @@ func (r Rect) Expanded(margin float64) Rect {
 }
 
 // Intersects reports whether the two rects share any area. Touching edges or
-// corners do not count, and an empty rect never intersects, mirroring
-// pymupdf's Rect.intersects (which compares with strict inequalities and
-// rejects empty inputs).
+// corners do not count, so a heading that merely abuts a label's box does
+// not block merging, and an empty rect never intersects.
 func (r Rect) Intersects(o Rect) bool {
 	return !r.Empty() && !o.Empty() &&
 		r.X0 < o.X1 && o.X0 < r.X1 && r.Y0 < o.Y1 && o.Y0 < r.Y1

@@ -1,6 +1,5 @@
 // Command fourbysix converts PDF pages to label-sized pages with automatic
-// content detection, cropping, rotation and scaling — the Go port of the
-// Python labelize tool. See README.md.
+// content detection, cropping, rotation and scaling. See README.md.
 package main
 
 import (
@@ -116,8 +115,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 
 	userPath := config.UserConfigPath()
 
-	// --init mode: copy the example config, refusing to overwrite. Like
-	// Python, the directory is created even when the file already exists.
+	// --init mode: copy the example config, refusing to overwrite.
 	if init {
 		if err := config.Init(userPath); err == config.ErrExists {
 			fmt.Fprintf(stderr, "Config already exists at %s\n", userPath)
@@ -205,7 +203,6 @@ func run(args []string, stdout, stderr io.Writer) int {
 		outputPath = filepath.Join(dir, stem+cfg.OutputSuffix+".pdf")
 	}
 
-	// Header, mirroring the Python program.
 	if !quiet {
 		fmt.Fprintf(stdout, "fourbysix  %s  →  %s\n", inputPath, outputPath)
 		fmt.Fprintf(stdout, "  Label:   %g×%g in\n", cfg.LabelW, cfg.LabelH)

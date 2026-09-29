@@ -33,7 +33,7 @@ var (
 
 // initPool lazily compiles the pdfium wasm module once per process. Without a
 // compilation cache every run spends ~2.6 s compiling; the cache made warm
-// runs ~0.3 s end to end.
+// runs take ~0.3 s end to end.
 func initPool() error {
 	poolOne.Do(func() {
 		cacheDir, err := userCacheDir()
@@ -236,9 +236,8 @@ func (d *Doc) walkObjects(page int, fn func(obj Object, ref references.FPDF_PAGE
 
 // leafBounds returns a non-form object's bounds in its parent's PDF space.
 // A stroked path uses its geometry instead of FPDFPageObj_GetBounds, which
-// inflates the box by the stroke extent; PyMuPDF (and therefore the Python
-// tool) measures the path itself, and the difference is enough to change the
-// reported label size.
+// inflates the box by the stroke extent. A bordered label would otherwise
+// grow by its line width on every side and change the reported label size.
 func (d *Doc) leafBounds(typ enums.FPDF_PAGEOBJ, obj references.FPDF_PAGEOBJECT) (float64, float64, float64, float64, error) {
 	if typ == enums.FPDF_PAGEOBJ_PATH {
 		if dm, err := d.inst.FPDFPath_GetDrawMode(&requests.FPDFPath_GetDrawMode{PageObject: obj}); err == nil && dm.Stroke {
@@ -254,8 +253,8 @@ func (d *Doc) leafBounds(typ enums.FPDF_PAGEOBJ, obj references.FPDF_PAGEOBJECT)
 	return float64(b.Left), float64(b.Bottom), float64(b.Right), float64(b.Top), nil
 }
 
-// pathGeometryBounds maps every path segment endpoint (and Bezier control
-// point, which PyMuPDF also counts) through the object's matrix and returns
+// pathGeometryBounds maps every path segment endpoint and Bezier control
+// point through the object's matrix and returns
 // the bounding box in the parent's PDF space.
 func (d *Doc) pathGeometryBounds(obj references.FPDF_PAGEOBJECT) (float64, float64, float64, float64, error) {
 	m, err := d.inst.FPDFPageObj_GetMatrix(&requests.FPDFPageObj_GetMatrix{PageObject: obj})
@@ -372,9 +371,8 @@ func toTopLeft(pageH float64, o Object) layout.Rect {
 }
 
 // whiteFillPath reports whether a path has no stroke, some fill, and a fill
-// color with all channels above 242: such a path paints nothing visible and
-// is skipped, exactly like the Python's get_drawings filter
-// (min(fill) > 0.95 with no stroke color).
+// color with all channels above 242 (0.95): such a path paints nothing
+// visible on white paper, and web pages draw many of them as backgrounds.
 func (d *Doc) whiteFillPath(ref references.FPDF_PAGEOBJECT) (bool, error) {
 	dm, err := d.inst.FPDFPath_GetDrawMode(&requests.FPDFPath_GetDrawMode{PageObject: ref})
 	if err != nil {

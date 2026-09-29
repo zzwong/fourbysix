@@ -48,7 +48,7 @@ func TestPageCountAndSize(t *testing.T) {
 	}
 }
 
-// TestFormObjectMatrix is the plan's form test: a form drawing a 50x50 rect
+// TestFormObjectMatrix: a form drawing a 50x50 rect
 // at its origin, placed with "1 0 0 1 100 100 cm", must surface as a
 // graphic at page-space position (100,100)-(150,150) in PDF coordinates,
 // i.e. (100,642)-(150,692) in top-left space on a 612x792 page.
@@ -194,7 +194,7 @@ func TestObjectTypes(t *testing.T) {
 }
 
 // TestAmazonShapedFixture rebuilds the three-page Amazon return PDF from
-// the plan's measured geometry and checks the split-mode regions come out
+// geometry measured from a real one and checks the split-mode regions come out
 // where the real PDF puts them.
 func TestAmazonShapedFixture(t *testing.T) {
 	data := mustWrite(t, amazonFixture())

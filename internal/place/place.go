@@ -1,6 +1,6 @@
 // Package place turns one page region into a positioned label image:
 // crop (with margin) -> rotate -> scale -> optional threshold -> centered on
-// the label page. It mirrors the Python _place_region.
+// the label page.
 package place
 
 import (
@@ -71,8 +71,6 @@ func ProcessImage(img image.Image, contentW, contentH float64, cfg Config) *Resu
 
 	rotW, rotH := contentW, contentH
 	if doRotate {
-		// The Python rotated clockwise for both fixed policies; ccw90 must
-		// rotate the other way.
 		img = rotate90(img, cfg.Rotation != "ccw90")
 		rotW, rotH = contentH, contentW
 	}
@@ -131,16 +129,17 @@ func rotate90(src image.Image, clockwise bool) image.Image {
 	return dst
 }
 
-// resize scales the image with CatmullRom, matching PIL's LANCZOS.
+// resize scales with CatmullRom, the sharpest kernel x/image/draw offers,
+// because barcodes must stay crisp after downscaling.
 func resize(src image.Image, w, h int) image.Image {
 	dst := image.NewRGBA(image.Rect(0, 0, w, h))
 	draw.CatmullRom.Scale(dst, dst.Bounds(), src, src.Bounds(), draw.Src, nil)
 	return dst
 }
 
-// threshold maps each pixel to pure black or white by luma < 128, porting
-// the Python convert("L") + point(lambda p: 0 if p < 128 else 255) with the
-// same ITU-R 601 luma coefficients.
+// threshold maps each pixel to pure black or white by ITU-R 601 luma < 128.
+// Thermal printers are binary devices; sending pure black and white stops
+// the driver from dithering gray edges.
 func threshold(src image.Image) *image.Gray {
 	b := src.Bounds()
 	gray := image.NewGray(image.Rect(0, 0, b.Dx(), b.Dy()))

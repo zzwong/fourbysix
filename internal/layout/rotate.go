@@ -1,9 +1,7 @@
 package layout
 
 // ShouldRotate decides whether rotating the content 90 degrees improves the
-// fit on the label. It is a direct port of the Python _should_rotate; the
-// direction of the rotation is the caller's business (the Python rotated
-// clockwise even for the ccw90 policy, which the Go port fixes).
+// fit on the label. The direction of the rotation is the caller's business.
 //
 // Policies:
 //   - none: never rotate.

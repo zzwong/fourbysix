@@ -158,8 +158,7 @@ func TestRunProcessesEveryPage(t *testing.T) {
 	}
 }
 
-// TestRunSplitSkipsPagesWithoutLabels ports the Python
-// test_cli_split_skips_pages_without_labels, including flags placed after the
+// TestRunSplitSkipsPagesWithoutLabels also covers flags placed after the
 // positional argument.
 func TestRunSplitSkipsPagesWithoutLabels(t *testing.T) {
 	dir := t.TempDir()

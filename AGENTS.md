@@ -4,10 +4,9 @@ Conventions for working in this repository.
 
 ## What this is
 
-`fourbysix` is a Go port of the Python `labelize` tool: it crops shipping and
-return-label PDFs onto label-sized pages (default 4x6 in). The behavioral spec
-is the Python source; when porting, match its output text and numbers exactly
-unless a change is called out.
+`fourbysix` crops shipping and return-label PDFs onto label-sized pages
+(default 4x6 in). The CLI's output lines are part of its interface: scripts
+and agents parse them, so change their format deliberately.
 
 ## Constraints
 
@@ -18,7 +17,6 @@ unless a change is called out.
   `golang.org/x/image` (BSD). Justify anything else.
 - Never commit a real label PDF: they carry home addresses and tracking
   numbers. Tests build fixtures with `internal/testpdf`.
-- Do not create a LICENSE file.
 
 ## Layout
 

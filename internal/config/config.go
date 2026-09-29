@@ -1,7 +1,7 @@
 // Package config holds defaults, YAML loading with deep-merge semantics,
 // and --init. Load order is defaults -> user config -> --config -> CLI
-// flags; each YAML file only overrides the keys it contains, which is what
-// the Python _deep_update does for the flat keys and the label dict.
+// flags; each YAML file only overrides the keys it contains, including
+// individual keys of the label dict.
 package config
 
 import (
@@ -42,8 +42,8 @@ func Defaults() Config {
 	}
 }
 
-// UserConfigPath resolves the user config, replacing Python's ~/.labelize
-// with the platform config dir: $XDG_CONFIG_HOME/fourbysix/config.yaml or
+// UserConfigPath resolves the user config in the platform config dir:
+// $XDG_CONFIG_HOME/fourbysix/config.yaml or
 // os.UserConfigDir()/fourbysix/config.yaml.
 func UserConfigPath() string {
 	dir, err := os.UserConfigDir()
@@ -56,8 +56,7 @@ func UserConfigPath() string {
 }
 
 // Load merges a YAML config file onto cfg. Unknown keys are ignored, and a
-// partial "label" dict only overrides the keys present, mirroring the
-// Python deep update.
+// partial "label" dict only overrides the keys present.
 func Load(path string, cfg Config) (Config, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -77,8 +76,7 @@ func Load(path string, cfg Config) (Config, error) {
 var ErrExists = errors.New("config already exists")
 
 // Init writes the embedded example config to path after creating its parent
-// directory, refusing to overwrite an existing file, like the Python
-// _init_config.
+// directory, refusing to overwrite an existing file.
 func Init(path string) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return err
@@ -148,7 +146,8 @@ func toStringMap(v any) (map[string]any, bool) {
 }
 
 // number accepts the scalars yaml.v3 produces for numeric values — int,
-// float — plus quoted numbers, like Python's permissive dynamic config.
+// float — plus quoted numbers, so hand-edited configs like `dpi: "203"`
+// still load.
 func number(v any) (float64, bool, error) {
 	switch n := v.(type) {
 	case int:

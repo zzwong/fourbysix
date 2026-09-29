@@ -2,27 +2,31 @@ package layout
 
 import "sort"
 
-// Split mode constants, mirroring the Python module values: SPLIT_MERGE_GAP
-// is the horizontal and vertical whitespace inside which graphics join one
-// label (a barcode and its item table sit ~34 pt apart); SPLIT_MIN_SIZE
-// drops clusters smaller than 1 inch on a side (banners and rules).
+// SplitMergeGap is the whitespace, on each axis, within which graphics join
+// one label: a return slip's barcode and item table sit ~34 pt apart.
+// SplitMinSize drops clusters smaller than 1 inch on a side, which are
+// banners and rules, not labels.
 const (
 	SplitMergeGap = 45
 	SplitMinSize  = 72
 )
 
-// horizontalGap returns the whitespace between two rects on each axis,
-// 0 when they overlap, porting the Python _gap.
-func horizontalGap(a, b Rect) (dx, dy float64) {
+// gaps returns the whitespace between two rects on each axis, 0 when they
+// overlap.
+func gaps(a, b Rect) (dx, dy float64) {
 	dx = max(0, max(a.X0, b.X0)-min(a.X1, b.X1))
 	dy = max(0, max(a.Y0, b.Y0)-min(a.Y1, b.Y1))
 	return dx, dy
 }
 
 // FindLabelRegions clusters graphic rects into labels and returns one rect
-// per label, top to bottom. It ported the Python _find_label_regions
-// directly: graphics within SplitMergeGap of each other join unless the
-// merged box would swallow free-standing text (a heading or instruction
+// per label, top to bottom.
+//
+// Web-printed return PDFs put several labels on one page with headings and
+// instructions between them. A heading can sit closer to a label than two
+// parts of the same label sit to each other, so whitespace alone cannot
+// separate them. Instead, graphics within SplitMergeGap of each other join
+// unless the merged box would swallow free-standing text (a heading or instruction
 // line), which marks the boundary between two labels. Text only ends up in a
 // label when it lies inside that label's graphics, such as an address inside
 // a bordered box.
@@ -47,7 +51,7 @@ func FindLabelRegions(graphics, text []Rect, page Rect) []Rect {
 	}
 
 	mergeable := func(a, b Rect) bool {
-		dx, dy := horizontalGap(a, b)
+		dx, dy := gaps(a, b)
 		if dx > SplitMergeGap || dy > SplitMergeGap {
 			return false
 		}
