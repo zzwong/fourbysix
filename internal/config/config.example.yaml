@@ -1,0 +1,25 @@
+# fourbysix default configuration
+# All values can be overridden via CLI flags:
+#   fourbysix input.pdf --label 2x4 --rotation cw90 --dpi 150
+
+label:
+  width: 4       # inches
+  height: 6      # inches
+
+dpi: 300          # rendering resolution — set to match your printer's native DPI
+                    # thermal printers: typically 203 or 300. Check your specs.
+                    # mismatched DPI → print system resamples → faded/gappy spots
+margin: 8         # points of padding around detected content
+
+# Rotation policy for fitting content into label dimensions:
+#   auto     — like best-fit, but keeps landscape content upright
+#              (landscape usually has horizontal text → unreadable if rotated)
+#   best-fit — rotate whenever aspect ratio improves by >10%
+#   none     — never rotate
+#   cw90     — always rotate 90° clockwise
+#   ccw90    — always rotate 90° counter-clockwise
+rotation: auto
+
+# Suffix appended to input filename when --output is not specified
+# e.g., input.pdf → input_label.pdf
+output_suffix: _label
