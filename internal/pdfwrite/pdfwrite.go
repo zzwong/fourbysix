@@ -10,6 +10,9 @@ import (
 	"fmt"
 	"image"
 	"io"
+	"math"
+	"strconv"
+	"strings"
 )
 
 // Page is one output label page.
@@ -22,6 +25,14 @@ type Page struct {
 
 // Write renders the pages onto labelW x labelH point pages.
 func Write(w io.Writer, labelW, labelH float64, pages []Page) error {
+	for _, dimension := range []float64{labelW, labelH} {
+		// An empty or overflowing float32 MediaBox makes PDFium silently
+		// substitute its default page size instead of the requested label.
+		points := float64(float32(dimension))
+		if points <= 0 || math.IsNaN(points) || math.IsInf(points, 0) {
+			return fmt.Errorf("label dimensions must be finite and positive within PDFium's numeric range")
+		}
+	}
 	b := &builder{}
 	catalog := b.add(nil)  // object 1
 	pagesObj := b.add(nil) // object 2, referenced as /Parent 2 0 R by every page
@@ -38,8 +49,8 @@ func Write(w io.Writer, labelW, labelH float64, pages []Page) error {
 			resources = b.add([]byte("<< >>"))
 		}
 		kids = append(kids, b.add([]byte(fmt.Sprintf(
-			"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 %g %g] /Resources %d 0 R /Contents %d 0 R >>",
-			labelW, labelH, resources, contentObj))))
+			"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 %s %s] /Resources %d 0 R /Contents %d 0 R >>",
+			pdfNumber(labelW), pdfNumber(labelH), resources, contentObj))))
 	}
 
 	var kidRefs bytes.Buffer
@@ -60,8 +71,20 @@ func contentStream(labelW, labelH float64, p Page) string {
 	if p.Image == nil {
 		return ""
 	}
-	return fmt.Sprintf("q %g 0 0 %g %g %g cm /Im0 Do Q\n",
-		p.W, p.H, p.X, labelH-p.Y-p.H)
+	return fmt.Sprintf("q %s 0 0 %s %s %s cm /Im0 Do Q\n",
+		pdfNumber(p.W), pdfNumber(p.H), pdfNumber(p.X), pdfNumber(labelH-p.Y-p.H))
+}
+
+// PDF numbers cannot use exponents; fixed precision could round a positive
+// dimension to zero, so keep the shortest round-trippable decimal instead.
+func pdfNumber(v float64) string {
+	number := strconv.FormatFloat(v, 'f', -1, 64)
+	// A decimal point selects PDFium's real-number parser; whole-number
+	// tokens otherwise go through its narrower integer representation.
+	if !strings.Contains(number, ".") {
+		number += ".0"
+	}
+	return number
 }
 
 // builder collects object bodies by number so the catalog and page tree can

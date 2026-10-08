@@ -8,6 +8,7 @@ import (
 	_ "embed"
 	"errors"
 	"fmt"
+	"math"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -40,6 +41,28 @@ func Defaults() Config {
 		Threshold:    false,
 		OutputSuffix: "_label",
 	}
+}
+
+// ValidateLabelSize checks the effective dimensions after all overrides.
+// PDFium stores page dimensions as float32, so a finite inch value can still
+// overflow or become zero after conversion to the renderer's PDF points.
+func (c Config) ValidateLabelSize() error {
+	for _, dimension := range []struct {
+		name  string
+		value float64
+	}{
+		{"width", c.LabelW},
+		{"height", c.LabelH},
+	} {
+		if dimension.value <= 0 || math.IsNaN(dimension.value) || math.IsInf(dimension.value*72, 0) {
+			return fmt.Errorf("label %s must be finite and positive in inches and PDF points", dimension.name)
+		}
+		points := float64(float32(dimension.value * 72))
+		if points <= 0 || math.IsInf(points, 0) {
+			return fmt.Errorf("label %s must remain finite and positive in PDFium's numeric range", dimension.name)
+		}
+	}
+	return nil
 }
 
 // UserConfigPath resolves the user config in the platform config dir:
