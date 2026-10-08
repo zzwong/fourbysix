@@ -187,6 +187,10 @@ func run(args []string, stdout, stderr io.Writer) int {
 	if fs.Changed("threshold") {
 		cfg.Threshold = threshold
 	}
+	if err := cfg.ValidateLabelSize(); err != nil {
+		fmt.Fprintf(stderr, "Error: %v\n", err)
+		return 1
+	}
 
 	// Output path: explicit, or <input dir>/<stem><suffix>.pdf.
 	inputPath := input

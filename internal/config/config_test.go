@@ -2,8 +2,10 @@ package config
 
 import (
 	"errors"
+	"math"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -27,6 +29,48 @@ func TestDefaults(t *testing.T) {
 	}
 	if cfg.Threshold || cfg.OutputSuffix != "_label" {
 		t.Fatalf("defaults = %+v", cfg)
+	}
+}
+
+func TestValidateLabelSize(t *testing.T) {
+	for _, dimension := range []string{"width", "height"} {
+		for _, tc := range []struct {
+			name  string
+			value float64
+			valid bool
+		}{
+			{"zero", 0, false},
+			{"negative zero", math.Copysign(0, -1), false},
+			{"negative", -1, false},
+			{"NaN", math.NaN(), false},
+			{"positive infinity", math.Inf(1), false},
+			{"negative infinity", math.Inf(-1), false},
+			{"point overflow", math.MaxFloat64, false},
+			{"fraction", 0.25, true},
+			{"renderer underflow", math.SmallestNonzeroFloat64, false},
+			{"renderer overflow", math.MaxFloat64 / 144, false},
+			{"renderer zero boundary", float64(math.SmallestNonzeroFloat32) / 144, false},
+			{"beyond largest renderer point", float64(math.MaxFloat32) * 2 / 72, false},
+			{"smallest renderer point", float64(math.SmallestNonzeroFloat32) / 72, true},
+			{"largest renderer point", float64(math.MaxFloat32) / 72, true},
+		} {
+			t.Run(dimension+"/"+tc.name, func(t *testing.T) {
+				cfg := Defaults()
+				if dimension == "width" {
+					cfg.LabelW = tc.value
+				} else {
+					cfg.LabelH = tc.value
+				}
+				err := cfg.ValidateLabelSize()
+				if tc.valid {
+					if err != nil {
+						t.Fatalf("ValidateLabelSize: %v", err)
+					}
+				} else if err == nil || !strings.Contains(err.Error(), "label "+dimension) {
+					t.Fatalf("error = %v, want invalid label %s", err, dimension)
+				}
+			})
+		}
 	}
 }
 

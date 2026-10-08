@@ -94,6 +94,12 @@ Load order (later overrides earlier):
 3. `--config PATH`
 4. CLI flags
 
+The effective label width and height must be positive and finite, including
+after conversion from inches to PDF points in PDFium's float32 numeric range.
+Dimensions that become zero or infinity in that conversion are rejected
+before the output file is created or overwritten. This prevents PDFium from
+silently substituting its default page size.
+
 Without a user config the tool runs on built-in defaults and prints a reminder
 about `--init`.
 
