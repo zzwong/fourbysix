@@ -349,7 +349,13 @@ func run(args []string, stdout, stderr io.Writer) int {
 		if printer != "" {
 			cmdArgs = append(cmdArgs, "-d", printer)
 		}
-		cmdArgs = append(cmdArgs, outputPath)
+		printPath := outputPath
+		if strings.HasPrefix(printPath, "-") {
+			// Keep lp from treating the filename as an option or stdin without
+			// changing how symlinks and ".." in the path are resolved.
+			printPath = "./" + printPath
+		}
+		cmdArgs = append(cmdArgs, printPath)
 		cmd := exec.Command("lp", cmdArgs...)
 		cmd.Stdout = stdout
 		cmd.Stderr = stderr
