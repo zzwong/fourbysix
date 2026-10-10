@@ -417,8 +417,8 @@ func (d *Doc) Regions(page int) (graphics, text []layout.Rect, err error) {
 }
 
 // Render draws a page at the given DPI, optionally cropped to rect (top-left
-// origin, points; nil means the full page). The returned image is detached
-// from pdfium's wasm memory, so it outlives the render.
+// origin, points; nil means the full page). The returned image is opaque on
+// white and detached from pdfium's wasm memory, so it outlives the render.
 func (d *Doc) Render(page, dpi int, rect *layout.Rect) (image.Image, error) {
 	req := &requests.RenderPageInDPI{
 		DPI: dpi,
@@ -446,13 +446,20 @@ func (d *Doc) Render(page, dpi int, rect *layout.Rect) (image.Image, error) {
 	return copyImage(res.Result.RenderedImage), nil
 }
 
-// copyImage copies pixels out of pdfium's wasm heap, which is only valid
-// until Cleanup.
+// copyImage flattens onto paper white while copying pixels out of pdfium's
+// wasm heap, which is only valid until Cleanup. Content detection and thermal
+// thresholding need the visible colors, not transparent black page margins.
 func copyImage(src image.Image) image.Image {
 	if src == nil {
 		return nil
 	}
 	dst := image.NewRGBA(src.Bounds())
-	draw.Draw(dst, dst.Bounds(), src, src.Bounds().Min, draw.Src)
+	draw.Draw(dst, dst.Bounds(), image.White, image.Point{}, draw.Src)
+	if rgba, ok := src.(*image.RGBA); ok {
+		// PDFium stores straight-alpha bytes in an RGBA image. Treating them
+		// as Go's premultiplied RGBA would blend translucent colors incorrectly.
+		src = &image.NRGBA{Pix: rgba.Pix, Stride: rgba.Stride, Rect: rgba.Rect}
+	}
+	draw.Draw(dst, dst.Bounds(), src, src.Bounds().Min, draw.Over)
 	return dst
 }

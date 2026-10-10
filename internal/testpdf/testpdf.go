@@ -27,6 +27,13 @@ func RectColor(x0, y0, x1, y1, r, g, b float64) RectSpec {
 	return RectSpec{X0: x0, Y0: y0, X1: x1, Y1: y1, R: r, G: g, B: b}
 }
 
+// AlphaRectSpec fills a rectangle with straight alpha from 0 to 1.
+type AlphaRectSpec struct {
+	RectSpec
+	Alpha     float64
+	BlendMode string // optional PDF blend mode, such as Darken
+}
+
 // TextSpec draws one line of Helvetica with its baseline at (X, Y) in
 // top-left-origin points.
 type TextSpec struct {
@@ -57,6 +64,7 @@ type FormSpec struct {
 type Page struct {
 	Width, Height float64 // points; zero dimensions default to letter (612x792)
 	Rects         []RectSpec
+	AlphaRects    []AlphaRectSpec
 	Strokes       []RectSpec
 	Texts         []TextSpec
 	Images        []ImageSpec
@@ -87,7 +95,16 @@ func Write(pages []Page) ([]byte, error) {
 		for _, f := range p.Forms {
 			forms = append(forms, b.formObj(f))
 		}
-		resources := b.resources(font, images, forms)
+		var alphaStates []int
+		for _, r := range p.AlphaRects {
+			blend := ""
+			if r.BlendMode != "" {
+				blend = " /BM /" + r.BlendMode
+			}
+			alphaStates = append(alphaStates, b.add([]byte(fmt.Sprintf(
+				"<< /Type /ExtGState /ca %g%s >>", r.Alpha, blend))))
+		}
+		resources := b.resources(font, images, forms, alphaStates)
 		content := b.streamObj(buildContent(w, h, p))
 		kids = append(kids, b.add([]byte(fmt.Sprintf(
 			"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 %g %g] /Resources %d 0 R /Contents %d 0 R >>",
@@ -111,6 +128,10 @@ func buildContent(w, h float64, p Page) string {
 		fmt.Fprintf(&s, "%g %g %g rg %g %g %g %g re f\n",
 			r.R, r.G, r.B,
 			r.X0, h-r.Y1, r.X1-r.X0, r.Y1-r.Y0)
+	}
+	for i, r := range p.AlphaRects {
+		fmt.Fprintf(&s, "q /GS%d gs %g %g %g rg %g %g %g %g re f Q\n",
+			i, r.R, r.G, r.B, r.X0, h-r.Y1, r.X1-r.X0, r.Y1-r.Y0)
 	}
 	for _, r := range p.Strokes {
 		fmt.Fprintf(&s, "%g %g %g RG %g %g %g %g re S\n",
@@ -192,7 +213,7 @@ func (b *builder) streamObj(content string) int {
 	return b.add(full)
 }
 
-func (b *builder) resources(font int, images, forms []int) int {
+func (b *builder) resources(font int, images, forms, alphaStates []int) int {
 	var xo strings.Builder
 	for i, im := range images {
 		fmt.Fprintf(&xo, "/Im%d %d 0 R ", i, im)
@@ -200,8 +221,13 @@ func (b *builder) resources(font int, images, forms []int) int {
 	for i, fm := range forms {
 		fmt.Fprintf(&xo, "/Fm%d %d 0 R ", i, fm)
 	}
+	var gs strings.Builder
+	for i, state := range alphaStates {
+		fmt.Fprintf(&gs, "/GS%d %d 0 R ", i, state)
+	}
 	return b.add([]byte(fmt.Sprintf(
-		"<< /Font << /F1 %d 0 R >> /XObject << %s>> >>", font, xo.String())))
+		"<< /Font << /F1 %d 0 R >> /XObject << %s>> /ExtGState << %s>> >>",
+		font, xo.String(), gs.String())))
 }
 
 // imageObj writes a 16x16 solid-gray image. Content detection only cares
