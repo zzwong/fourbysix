@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 )
 
-type saveFile interface {
+type saveTemp interface {
 	io.Writer
 	Close() error
 	Chmod(os.FileMode) error
@@ -16,33 +16,24 @@ type saveFile interface {
 }
 
 type saveOps struct {
-	createTemp func(string, string) (saveFile, error)
+	createTemp func(string, string) (saveTemp, error)
 	rename     func(string, string) error
 	remove     func(string) error
 }
 
-func defaultSaveOps() saveOps {
-	return saveOps{
-		createTemp: func(dir, pattern string) (saveFile, error) {
-			return os.CreateTemp(dir, pattern)
-		},
-		rename: os.Rename,
-		remove: os.Remove,
-	}
+func saveFile(path string, write func(io.Writer) error) error {
+	return saveFileWithOps(path, write, saveOps{
+		createTemp: func(dir, pattern string) (saveTemp, error) { return os.CreateTemp(dir, pattern) },
+		rename:     os.Rename,
+		remove:     os.Remove,
+	})
 }
 
-func saveOutput(path string, write func(io.Writer) error) error {
-	return saveOutputWithOps(path, write, defaultSaveOps())
-}
-
-// Replacement protects old bytes through reported pre-commit failures. It
-// does not promise crash durability or safety against concurrent path changes.
-func saveOutputWithOps(path string, write func(io.Writer) error, ops saveOps) (err error) {
-	// Split preserves the parent's symlink/.. semantics; Dir would clean it
-	// before filesystem traversal and could select a different directory.
+func saveFileWithOps(path string, write func(io.Writer) error, ops saveOps) (err error) {
+	// Split does not clean: parent symlinks must be followed before resolving .. .
 	parent, leaf := filepath.Split(path)
 	if leaf == "" || leaf == "." || leaf == ".." {
-		return fmt.Errorf("output must name a regular file: %q", path)
+		return fmt.Errorf("output must name a regular file: %s", path)
 	}
 	if parent == "" {
 		parent = "."
@@ -52,44 +43,41 @@ func saveOutputWithOps(path string, write func(io.Writer) error, ops saveOps) (e
 		return err
 	}
 	target := filepath.Join(parent, leaf)
-	info, statErr := os.Lstat(target)
-	if statErr != nil && !os.IsNotExist(statErr) {
-		return statErr
+	mode := os.FileMode(0o600)
+	info, err := os.Lstat(target)
+	if err == nil {
+		// Reject leaf links (including dangling links), devices and special modes.
+		// Replacement deliberately detaches this pathname from any hard links.
+		if !info.Mode().IsRegular() || info.Mode()&(os.ModeSetuid|os.ModeSetgid|os.ModeSticky) != 0 {
+			return fmt.Errorf("output must be a regular file without special mode bits: %s", path)
+		}
+		mode = info.Mode().Perm()
+	} else if !os.IsNotExist(err) {
+		return err
 	}
-	if statErr == nil && !info.Mode().IsRegular() {
-		return fmt.Errorf("output is not a regular file: %q", path)
-	}
-	f, err := ops.createTemp(parent, ".fourbysix-*.tmp")
+	temp, err := ops.createTemp(parent, ".fourbysix-*")
 	if err != nil {
 		return err
 	}
-	closed, committed := false, false
+	committed := false
 	defer func() {
-		if !closed {
-			err = errors.Join(err, f.Close())
+		if committed {
+			return
 		}
-		if !committed {
-			if cleanupErr := ops.remove(f.Name()); cleanupErr != nil && !os.IsNotExist(cleanupErr) {
-				err = errors.Join(err, fmt.Errorf("remove temporary output: %w", cleanupErr))
-			}
+		if cleanupErr := ops.remove(temp.Name()); cleanupErr != nil && !os.IsNotExist(cleanupErr) {
+			err = errors.Join(err, fmt.Errorf("remove temporary output: %w", cleanupErr))
 		}
 	}()
-	if err = write(f); err != nil {
-		return err
+	// Keep partial bytes private until serialization has finished.
+	err = write(temp)
+	if err == nil {
+		err = temp.Chmod(mode)
 	}
-	if statErr == nil {
-		// Restore ordinary permission bits, never special mode bits. New
-		// destinations retain CreateTemp's restrictive mode (0600 before umask).
-		if err = f.Chmod(info.Mode().Perm()); err != nil {
-			return err
-		}
-	}
-	err = f.Close()
-	closed = true
+	err = errors.Join(err, temp.Close())
 	if err != nil {
 		return err
 	}
-	if err = ops.rename(f.Name(), target); err != nil {
+	if err = ops.rename(temp.Name(), target); err != nil {
 		return err
 	}
 	committed = true

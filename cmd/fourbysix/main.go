@@ -62,11 +62,9 @@ optional arguments:
 // run is the whole CLI, factored so tests can drive it with injected
 // streams. It returns the process exit code.
 func run(args []string, stdout, stderr io.Writer) int {
-	return runWithSave(args, stdout, stderr, saveOutput)
+	return runWithSave(args, stdout, stderr, saveFile)
 }
 
-// The save boundary is injectable so CLI failures can be tested without
-// filling disks or reaching a physical printer.
 func runWithSave(args []string, stdout, stderr io.Writer, save func(string, func(io.Writer) error) error) int {
 	fs := pflag.NewFlagSet("fourbysix", pflag.ContinueOnError)
 	fs.SetOutput(io.Discard) // pflag noise is replaced by the usage text
