@@ -62,6 +62,10 @@ optional arguments:
 // run is the whole CLI, factored so tests can drive it with injected
 // streams. It returns the process exit code.
 func run(args []string, stdout, stderr io.Writer) int {
+	return runWithSave(args, stdout, stderr, saveFile)
+}
+
+func runWithSave(args []string, stdout, stderr io.Writer, save func(string, func(io.Writer) error) error) int {
 	fs := pflag.NewFlagSet("fourbysix", pflag.ContinueOnError)
 	fs.SetOutput(io.Discard) // pflag noise is replaced by the usage text
 
@@ -325,16 +329,9 @@ func run(args []string, stdout, stderr io.Writer) int {
 		return 1
 	}
 
-	outFile, err := os.Create(outputPath)
-	if err != nil {
-		fmt.Fprintf(stderr, "Error: %v\n", err)
-		return 1
-	}
-	err = pdfwrite.Write(outFile, cfg.LabelW*72, cfg.LabelH*72, labels)
-	closeErr := outFile.Close()
-	if err == nil {
-		err = closeErr
-	}
+	err = save(outputPath, func(w io.Writer) error {
+		return pdfwrite.Write(w, cfg.LabelW*72, cfg.LabelH*72, labels)
+	})
 	if err != nil {
 		fmt.Fprintf(stderr, "Error: %v\n", err)
 		return 1

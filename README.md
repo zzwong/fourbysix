@@ -151,3 +151,27 @@ spots, gaps, or blurry barcodes.
 `--threshold` converts the output to pure 1-bit black and white, giving
 thermal printers unambiguous per-dot instructions instead of a dithered
 grayscale image.
+
+
+### Saving safely
+
+Output is serialized into a unique temporary file in the resolved destination
+parent, closed, then renamed over the output. Ordinary reported write, permission,
+close or rename failures leave the previous destination bytes (or its absence)
+unchanged; this attempt's temporary file is removed. Cleanup errors are reported.
+Parent symlinks and `..` retain filesystem resolution order.
+
+Final-component symlinks, including dangling links, nonregular destinations, and
+files with setuid/setgid/sticky bits are rejected. Regular-file permission bits
+are retained; new outputs use private 0600 permissions. Replacement creates a new inode: other hard links keep the old bytes,
+including an input aliased through another hard link. Using the same input/output
+pathname is supported because the input is read before saving. Ownership, ACLs,
+extended attributes and other inode metadata are not preserved. Replacement is
+controlled by parent-directory permissions, so even a read-only regular output
+can be replaced when the directory permits it.
+
+On Unix, same-directory rename provides atomic pathname replacement. Non-Unix
+platforms do not have that atomicity guarantee and have not been qualified here.
+There is no fsync or power-loss/crash durability guarantee. Concurrent filesystem
+changes, especially adversarial directory or link swaps, are outside this local
+CLI's guarantee. Successful-save output and printing occur only after rename.
