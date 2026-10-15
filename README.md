@@ -127,6 +127,34 @@ usage: fourbysix [--label LABEL] [--config CONFIG] [-o OUTPUT]
 Flags may appear before or after the input path. `--pages` accepts 1-based
 pages and ranges in the order given, e.g. `2-3,5`.
 
+## Saving output safely
+
+Output is written to a unique temporary file in the destination's actual
+parent directory, then closed before replacing the destination. On Unix,
+the same-directory rename provides atomic pathname replacement. Reported
+failures before replacement preserve the previous destination, or its
+absence. Temporary-file cleanup is attempted on failure; a cleanup error
+is reported too. A failed save does not print the output or emit the
+successful-save line.
+
+The final path component must be absent or a regular file. Final-component
+symlinks (including dangling links), directories and other nonregular
+targets are rejected. Parent symlinks and their following `..` components
+are resolved in filesystem order. An overwrite replaces only the named
+path: other hard links retain the old file. Explicitly using the input as
+the output is supported because input bytes are read before saving.
+
+Existing files retain their ordinary permission bits; special mode bits
+are not copied. New files use 0600 before umask, rather than the former
+0666-before-umask default. Ownership, ACLs and extended attributes are not
+preserved. Replacement requires directory write permission and can replace
+a read-only file when directory permissions allow it.
+
+This is not a crash-recovery or power-loss durability guarantee: no file
+or directory sync is performed. Non-Unix rename atomicity is not promised.
+Concurrent filesystem mutation, including another process replacing the
+destination or its parent, is outside this guarantee.
+
 ## Limitations
 
 - **Content detection is pixel-based.** It looks for non-white pixels
@@ -151,3 +179,4 @@ spots, gaps, or blurry barcodes.
 `--threshold` converts the output to pure 1-bit black and white, giving
 thermal printers unambiguous per-dot instructions instead of a dithered
 grayscale image.
+
