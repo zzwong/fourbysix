@@ -1,6 +1,6 @@
 module github.com/zzwong/fourbysix
 
-go 1.26.5
+go 1.26.10
 
 require (
 	github.com/klippa-app/go-pdfium v1.21.0
