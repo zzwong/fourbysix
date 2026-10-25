@@ -62,7 +62,10 @@ type FormSpec struct {
 
 // Page is one page of the fixture.
 type Page struct {
-	Width, Height float64 // points; zero dimensions default to letter (612x792)
+	Width, Height float64   // points; zero dimensions default to letter (612x792)
+	CropBox       *RectSpec // optional crop in unrotated, top-left media coordinates
+	Rotate        int       // clockwise degrees, in multiples of 90
+	InheritRotate bool      // put Rotate on a parent /Pages node instead of the page
 	Rects         []RectSpec
 	AlphaRects    []AlphaRectSpec
 	Strokes       []RectSpec
@@ -77,7 +80,7 @@ const defaultPageW, defaultPageH = 612, 792
 func Write(pages []Page) ([]byte, error) {
 	b := &builder{}
 	catalog := b.add(nil)  // object 1: filled in once the page tree exists
-	pagesObj := b.add(nil) // object 2: page objects hardcode /Parent 2 0 R
+	pagesObj := b.add(nil) // object 2: root page tree
 	font := b.add([]byte("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>"))
 
 	var kids []int
@@ -106,9 +109,28 @@ func Write(pages []Page) ([]byte, error) {
 		}
 		resources := b.resources(font, images, forms, alphaStates)
 		content := b.streamObj(buildContent(w, h, p))
-		kids = append(kids, b.add([]byte(fmt.Sprintf(
-			"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 %g %g] /Resources %d 0 R /Contents %d 0 R >>",
-			w, h, resources, content))))
+		parent := pagesObj
+		if p.InheritRotate {
+			parent = b.add(nil)
+		}
+		var attrs strings.Builder
+		if p.CropBox != nil {
+			r := p.CropBox
+			fmt.Fprintf(&attrs, " /CropBox [%g %g %g %g]", r.X0, h-r.Y1, r.X1, h-r.Y0)
+		}
+		if p.Rotate != 0 && !p.InheritRotate {
+			fmt.Fprintf(&attrs, " /Rotate %d", p.Rotate)
+		}
+		page := b.add([]byte(fmt.Sprintf(
+			"<< /Type /Page /Parent %d 0 R /MediaBox [0 0 %g %g]%s /Resources %d 0 R /Contents %d 0 R >>",
+			parent, w, h, attrs.String(), resources, content)))
+		if p.InheritRotate {
+			b.set(parent, []byte(fmt.Sprintf(
+				"<< /Type /Pages /Parent %d 0 R /Kids [%d 0 R] /Count 1 /Rotate %d >>", pagesObj, page, p.Rotate)))
+			kids = append(kids, parent)
+		} else {
+			kids = append(kids, page)
+		}
 	}
 
 	var kidRefs strings.Builder

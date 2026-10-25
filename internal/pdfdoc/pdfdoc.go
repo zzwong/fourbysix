@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"image"
 	"image/draw"
+	"math"
 	"os"
 	"path/filepath"
 	"sync"
@@ -118,8 +119,8 @@ func (d *Doc) PageCount() (int, error) {
 	return pc.PageCount, nil
 }
 
-// PageSize returns the page dimensions in points (PDF space, bottom-left
-// origin).
+// PageSize returns the visible page dimensions in points, after the effective
+// CropBox and page rotation have been applied.
 func (d *Doc) PageSize(index int) (float64, float64, error) {
 	sz, err := d.inst.FPDF_GetPageSizeByIndex(&requests.FPDF_GetPageSizeByIndex{
 		Document: d.doc,
@@ -202,6 +203,13 @@ type Object struct {
 // PageObject reference stays valid until the page is closed, so fn must not
 // retain it.
 func (d *Doc) walkObjects(page int, fn func(obj Object, ref references.FPDF_PAGEOBJECT) error) error {
+	return d.withPage(page, func(pageRef references.FPDF_PAGE) error {
+		return d.walkPageObjects(pageRef, fn)
+	})
+}
+
+// withPage keeps geometry queries and object traversal on the same loaded page.
+func (d *Doc) withPage(page int, fn func(references.FPDF_PAGE) error) error {
 	loaded, err := d.inst.FPDF_LoadPage(&requests.FPDF_LoadPage{Document: d.doc, Index: page})
 	if err != nil {
 		return fmt.Errorf("load page %d: %w", page, err)
@@ -213,6 +221,10 @@ func (d *Doc) walkObjects(page int, fn func(obj Object, ref references.FPDF_PAGE
 		_, _ = d.inst.FPDF_ClosePage(&requests.FPDF_ClosePage{Page: pageRef})
 	}()
 
+	return fn(pageRef)
+}
+
+func (d *Doc) walkPageObjects(pageRef references.FPDF_PAGE, fn func(Object, references.FPDF_PAGEOBJECT) error) error {
 	countRes, err := d.inst.FPDFPage_CountObjects(&requests.FPDFPage_CountObjects{
 		Page: requests.Page{ByReference: &pageRef},
 	})
@@ -360,14 +372,66 @@ func (d *Doc) Objects(page int) ([]Object, error) {
 	return out, err
 }
 
-// toTopLeft converts PDF-space bounds to a top-left-origin layout.Rect.
-func toTopLeft(pageH float64, o Object) layout.Rect {
-	return layout.Rect{
-		X0: o.Left,
-		Y0: pageH - o.Top,
-		X1: o.Right,
-		Y1: pageH - o.Bottom,
+// pageGeometry maps raw PDF points to the visible, rotated page. PDFium's
+// effective bounding box resolves inherited boxes and intersects crop and media;
+// leaf-only box getters and an integer device transform lose that information.
+type pageGeometry struct {
+	transform matrix
+	bounds    layout.Rect
+}
+
+func newPageGeometry(left, bottom, right, top float64, rotation enums.FPDF_PAGE_ROTATION) (pageGeometry, error) {
+	for _, v := range []float64{left, bottom, right, top} {
+		if math.IsNaN(v) || math.IsInf(v, 0) {
+			return pageGeometry{}, errors.New("nonfinite page bounding box")
+		}
 	}
+	width, height := right-left, top-bottom
+	if width <= 0 || height <= 0 || math.IsInf(width, 0) || math.IsInf(height, 0) {
+		return pageGeometry{}, errors.New("invalid page bounding box")
+	}
+	var m matrix
+	switch rotation {
+	case 0:
+		m = matrix{A: 1, D: -1, E: -left, F: top}
+	case 1:
+		m = matrix{B: 1, C: 1, E: -bottom, F: -left}
+		width, height = height, width
+	case 2:
+		m = matrix{A: -1, D: 1, E: right, F: -bottom}
+	case 3:
+		m = matrix{B: -1, C: -1, E: top, F: right}
+		width, height = height, width
+	default:
+		return pageGeometry{}, fmt.Errorf("invalid page rotation: %d", rotation)
+	}
+	return pageGeometry{transform: m, bounds: layout.Rect{X1: width, Y1: height}}, nil
+}
+
+func (d *Doc) pageGeometry(pageRef references.FPDF_PAGE) (pageGeometry, error) {
+	page := requests.Page{ByReference: &pageRef}
+	box, err := d.inst.FPDF_GetPageBoundingBox(&requests.FPDF_GetPageBoundingBox{Page: page})
+	if err != nil {
+		return pageGeometry{}, fmt.Errorf("page bounding box: %w", err)
+	}
+	rotation, err := d.inst.FPDFPage_GetRotation(&requests.FPDFPage_GetRotation{Page: page})
+	if err != nil {
+		return pageGeometry{}, fmt.Errorf("page rotation: %w", err)
+	}
+	return newPageGeometry(float64(box.Rect.Left), float64(box.Rect.Bottom), float64(box.Rect.Right), float64(box.Rect.Top), rotation.PageRotation)
+}
+
+func (g pageGeometry) region(o Object) (layout.Rect, bool, error) {
+	for _, v := range []float64{o.Left, o.Bottom, o.Right, o.Top} {
+		if math.IsNaN(v) || math.IsInf(v, 0) {
+			return layout.Rect{}, false, errors.New("nonfinite object bounds")
+		}
+	}
+	x0, y0, x1, y1 := g.transform.bbox(o.Left, o.Bottom, o.Right, o.Top)
+	r := layout.Rect{X0: x0, Y0: y0, X1: x1, Y1: y1}.Clip(g.bounds)
+	// A straight stroked path has zero geometric width or height. Preserve
+	// those visible lines for layout's widening rule; reject only disjoint boxes.
+	return r, r.X0 <= r.X1 && r.Y0 <= r.Y1, nil
 }
 
 // whiteFillPath reports whether a path has no stroke, some fill, and a fill
@@ -389,29 +453,38 @@ func (d *Doc) whiteFillPath(ref references.FPDF_PAGEOBJECT) (bool, error) {
 }
 
 // Regions splits a page's objects into graphic rects (images, shadings, and
-// paths that paint something) and text rects, both in top-left-origin page
-// space, ready for layout.FindLabelRegions.
+// paths that paint something) and text rects, both clipped to the visible,
+// rotated page in top-left-origin points, ready for layout.FindLabelRegions.
 func (d *Doc) Regions(page int) (graphics, text []layout.Rect, err error) {
-	_, pageH, err := d.PageSize(page)
-	if err != nil {
-		return nil, nil, err
-	}
-	err = d.walkObjects(page, func(o Object, ref references.FPDF_PAGEOBJECT) error {
-		switch o.Type {
-		case enums.FPDF_PAGEOBJ_TEXT:
-			text = append(text, toTopLeft(pageH, o))
-		case enums.FPDF_PAGEOBJ_IMAGE, enums.FPDF_PAGEOBJ_SHADING:
-			graphics = append(graphics, toTopLeft(pageH, o))
-		case enums.FPDF_PAGEOBJ_PATH:
-			skip, err := d.whiteFillPath(ref)
+	err = d.withPage(page, func(pageRef references.FPDF_PAGE) error {
+		geometry, err := d.pageGeometry(pageRef)
+		if err != nil {
+			return err
+		}
+		return d.walkPageObjects(pageRef, func(o Object, ref references.FPDF_PAGEOBJECT) error {
+			r, visible, err := geometry.region(o)
 			if err != nil {
 				return err
 			}
-			if !skip {
-				graphics = append(graphics, toTopLeft(pageH, o))
+			if !visible {
+				return nil
 			}
-		}
-		return nil
+			switch o.Type {
+			case enums.FPDF_PAGEOBJ_TEXT:
+				text = append(text, r)
+			case enums.FPDF_PAGEOBJ_IMAGE, enums.FPDF_PAGEOBJ_SHADING:
+				graphics = append(graphics, r)
+			case enums.FPDF_PAGEOBJ_PATH:
+				skip, err := d.whiteFillPath(ref)
+				if err != nil {
+					return err
+				}
+				if !skip {
+					graphics = append(graphics, r)
+				}
+			}
+			return nil
+		})
 	})
 	return graphics, text, err
 }

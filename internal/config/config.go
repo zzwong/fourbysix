@@ -65,6 +65,14 @@ func (c Config) ValidateLabelSize() error {
 	return nil
 }
 
+// ValidateDPI checks the effective resolution after all overrides.
+func (c Config) ValidateDPI() error {
+	if c.DPI <= 0 {
+		return errors.New("dpi must be positive")
+	}
+	return nil
+}
+
 // UserConfigPath resolves the user config in the platform config dir:
 // $XDG_CONFIG_HOME/fourbysix/config.yaml or
 // os.UserConfigDir()/fourbysix/config.yaml.
@@ -100,14 +108,29 @@ var ErrExists = errors.New("config already exists")
 
 // Init writes the embedded example config to path after creating its parent
 // directory, refusing to overwrite an existing file.
+// A write or close failure may leave a partial new config for inspection.
 func Init(path string) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return err
 	}
-	if _, err := os.Stat(path); err == nil {
+	// Classify all existing entries consistently, including directories and
+	// dangling links. Exclusive creation below still guards the later race.
+	if _, err := os.Lstat(path); err == nil {
 		return ErrExists
 	}
-	return os.WriteFile(path, exampleConfig, 0o644)
+	file, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
+	if errors.Is(err, os.ErrExist) {
+		return ErrExists
+	}
+	if err != nil {
+		return err
+	}
+	_, err = file.Write(exampleConfig)
+	closeErr := file.Close()
+	if err != nil {
+		return err
+	}
+	return closeErr
 }
 
 func (c Config) apply(m map[string]any) (Config, error) {
@@ -129,12 +152,12 @@ func (c Config) apply(m map[string]any) (Config, error) {
 				c.LabelH = h
 			}
 		case "dpi":
-			n, ok, err := number(val)
+			n, ok, err := dpiNumber(val)
 			if err != nil {
 				return c, fmt.Errorf("dpi: %w", err)
 			}
 			if ok {
-				c.DPI = int(n)
+				c.DPI = n
 			}
 		case "margin":
 			n, ok, err := number(val)
@@ -190,4 +213,46 @@ func number(v any) (float64, bool, error) {
 	default:
 		return 0, false, nil
 	}
+}
+
+// dpiNumber preserves exact integer scalars instead of rounding them through
+// float64. Floating-point inputs must be finite whole numbers in int's range;
+// the exclusive upper bound avoids float64 rounding MaxInt up to 2^(bits-1).
+func dpiNumber(v any) (int, bool, error) {
+	invalid := errors.New("must be a finite integer within the platform int range")
+	switch n := v.(type) {
+	case nil:
+		return 0, false, nil
+	case int:
+		return n, true, nil
+	case int64:
+		maxInt := int64(^uint(0) >> 1)
+		if n < -maxInt-1 || n > maxInt {
+			return 0, false, invalid
+		}
+		return int(n), true, nil
+	case uint64:
+		if n > uint64(^uint(0)>>1) {
+			return 0, false, invalid
+		}
+		return int(n), true, nil
+	case string:
+		if value, err := strconv.ParseInt(n, 10, strconv.IntSize); err == nil {
+			return int(value), true, nil
+		} else if errors.Is(err, strconv.ErrRange) {
+			return 0, false, invalid
+		}
+	}
+	n, ok, err := number(v)
+	if err != nil {
+		return 0, false, err
+	}
+	if !ok {
+		return 0, false, invalid
+	}
+	limit := math.Ldexp(1, strconv.IntSize-1)
+	if math.IsNaN(n) || math.IsInf(n, 0) || math.Trunc(n) != n || n < -limit || n >= limit {
+		return 0, false, invalid
+	}
+	return int(n), true, nil
 }
