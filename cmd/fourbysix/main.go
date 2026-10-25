@@ -195,6 +195,10 @@ func runWithSave(args []string, stdout, stderr io.Writer, save func(string, func
 		fmt.Fprintf(stderr, "Error: %v\n", err)
 		return 1
 	}
+	if err := cfg.ValidateDPI(); err != nil {
+		fmt.Fprintf(stderr, "Error: %v\n", err)
+		return 1
+	}
 
 	// Output path: explicit, or <input dir>/<stem><suffix>.pdf.
 	inputPath := input
