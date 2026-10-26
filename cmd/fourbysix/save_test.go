@@ -298,3 +298,89 @@ func TestRunSaveSuccessAndAliases(t *testing.T) {
 		})
 	}
 }
+
+func TestRunDefaultOutputPreservesInputParent(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Unix symlink behavior")
+	}
+	for _, tc := range []struct {
+		name, input, output, suffix string
+	}{
+		{"relative", "shortcut/../return.pdf", "shortcut/../return_label.pdf", "_label"},
+		{"absolute", "shortcut/../return.pdf", "shortcut/../return_label.pdf", "_label"},
+		{"lexical components", "./shortcut//.././return.pdf", "./shortcut//.././return_label.pdf", "_label"},
+		{"custom suffix", "shortcut/../return.copy.PDF", "shortcut/../return.copy_shipping.pdf", "_shipping"},
+		{"no extension", "shortcut/../return", "shortcut/../return_label.pdf", "_label"},
+		{"input symlink", "alias/return.pdf", "alias/return_label.pdf", "_label"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			t.Chdir(dir)
+			if err := os.MkdirAll("target/nested", 0o700); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.Symlink("target/nested", "shortcut"); err != nil {
+				t.Fatal(err)
+			}
+			src := writeFixture(t, "target", []testpdf.Page{{}, {}})
+			if tc.name == "input symlink" {
+				if err := os.Mkdir("alias", 0o700); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.Symlink("../target/return.pdf", tc.input); err != nil {
+					t.Fatal(err)
+				}
+			} else {
+				path := filepath.Join("target", filepath.Base(tc.input))
+				if err := os.Rename(src, path); err != nil {
+					t.Fatal(err)
+				}
+				src = path
+			}
+			input, output := tc.input, tc.output
+			if tc.name == "absolute" {
+				// Join would erase the symlink/.. traversal under test.
+				input, output = dir+"/"+input, dir+"/"+output
+			}
+			before, err := os.ReadFile(src)
+			if err != nil {
+				t.Fatal(err)
+			}
+			wrong := filepath.Base(output)
+			if tc.name == "input symlink" {
+				wrong = filepath.Join("target", wrong)
+			}
+			sentinel := []byte("unrelated output must not be replaced")
+			if err := os.WriteFile(wrong, sentinel, 0o600); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile("config.yaml", []byte("output_suffix: "+tc.suffix+"\n"), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			code, stdout, stderr := runCLI(t, "--config", "config.yaml", input)
+			if code != 0 {
+				t.Fatalf("code=%d stdout=%q stderr=%q", code, stdout, stderr)
+			}
+			if !strings.HasPrefix(stdout, "fourbysix  "+input+"  →  "+output+"\n") ||
+				!strings.HasSuffix(stdout, "\nSaved: "+output+"\n") {
+				t.Errorf("stdout did not preserve input parent: %q", stdout)
+			}
+			assertSavePreserved(t, src, before)
+			assertSavePreserved(t, wrong, sentinel)
+			count, sizes := pageSizes(t, output)
+			if count != 2 {
+				t.Fatalf("count=%d, want 2", count)
+			}
+			for _, size := range sizes {
+				if size != [2]float64{288, 432} {
+					t.Fatalf("size=%v, want 288x432", size)
+				}
+			}
+			if tc.name == "input symlink" {
+				if target, err := os.Readlink(input); err != nil || target != "../target/return.pdf" {
+					t.Fatalf("input symlink changed: %q, %v", target, err)
+				}
+			}
+		})
+	}
+}

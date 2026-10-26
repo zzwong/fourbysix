@@ -136,20 +136,60 @@ func TestRunPrintOutputPaths(t *testing.T) {
 }
 
 func TestRunPrintDefaultOutputPath(t *testing.T) {
-	dir := t.TempDir()
-	t.Chdir(dir)
-	capture := installFakeLP(t)
-	src := writeFixture(t, dir, []testpdf.Page{{}})
-	if err := os.Rename(src, "-input.pdf"); err != nil {
-		t.Fatal(err)
-	}
-	code, _, stderr := runCLI(t, "--print", "-q", "--", "-input.pdf")
-	if code != 0 {
-		t.Fatalf("exit = %d, stderr = %q", code, stderr)
-	}
-	args, err := os.ReadFile(filepath.Join(capture, "args"))
-	if err != nil || string(args) != "./-input_label.pdf\x00" {
-		t.Fatalf("lp args = %q, error = %v", args, err)
+	for _, tc := range []struct {
+		name, input, output, operand string
+	}{
+		{"dash basename", "-input.pdf", "-input_label.pdf", "./-input_label.pdf"},
+		{"dash symlink parent", "-shortcut//../return.pdf", "-shortcut//../return_label.pdf", "./-shortcut//../return_label.pdf"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			t.Chdir(dir)
+			capture := installFakeLP(t)
+			src := writeFixture(t, dir, []testpdf.Page{{}})
+			if tc.name == "dash symlink parent" {
+				if err := os.MkdirAll("target/nested", 0o700); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.Symlink("target/nested", "-shortcut"); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if err := os.Rename(src, tc.input); err != nil {
+				t.Fatal(err)
+			}
+			input, err := os.ReadFile(tc.input)
+			if err != nil {
+				t.Fatal(err)
+			}
+			code, stdout, stderr := runCLI(t, "--print", "--", tc.input)
+			if code != 0 {
+				t.Fatalf("exit = %d, stderr = %q", code, stderr)
+			}
+			if !strings.HasPrefix(stdout, "fourbysix  "+tc.input+"  →  "+tc.output+"\n") ||
+				!strings.Contains(stdout, "\nSaved: "+tc.output+"\n") {
+				t.Errorf("stdout missing original output path: %q", stdout)
+			}
+			args, err := os.ReadFile(filepath.Join(capture, "args"))
+			if err != nil || string(args) != tc.operand+"\x00" {
+				t.Errorf("lp args = %q, want %q, error = %v", args, tc.operand, err)
+			}
+			assertSavePreserved(t, tc.input, input)
+			if tc.name == "dash symlink parent" {
+				assertSavePreserved(t, "return_label.pdf", nil)
+			}
+			saved, err := os.ReadFile(tc.output)
+			if err != nil {
+				t.Fatal(err)
+			}
+			printed, err := os.ReadFile(filepath.Join(capture, "pdf"))
+			if err != nil || !bytes.Equal(saved, printed) {
+				t.Fatalf("lp did not read the saved PDF: %v", err)
+			}
+			if count, sizes := pageSizes(t, tc.output); count != 1 || sizes[0] != [2]float64{288, 432} {
+				t.Fatalf("pages=%d sizes=%v, want 1 at 288x432", count, sizes)
+			}
+		})
 	}
 }
 

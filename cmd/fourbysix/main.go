@@ -208,11 +208,11 @@ func runWithSave(args []string, stdout, stderr io.Writer, save func(string, func
 	}
 	outputPath := output
 	if outputPath == "" {
-		base := filepath.Base(inputPath)
-		dir := filepath.Dir(inputPath)
+		// Preserve the parent: symlinks must be followed before resolving .. .
+		dir, base := filepath.Split(inputPath)
 		ext := filepath.Ext(base)
 		stem := strings.TrimSuffix(base, ext)
-		outputPath = filepath.Join(dir, stem+cfg.OutputSuffix+".pdf")
+		outputPath = dir + stem + cfg.OutputSuffix + ".pdf"
 	}
 
 	if !quiet {
