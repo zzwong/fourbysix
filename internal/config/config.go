@@ -73,16 +73,37 @@ func (c Config) ValidateDPI() error {
 	return nil
 }
 
-// UserConfigPath resolves the user config in the platform config dir:
-// $XDG_CONFIG_HOME/fourbysix/config.yaml or
-// os.UserConfigDir()/fourbysix/config.yaml.
+// UserConfigPath resolves the user config the same way on every platform:
+//
+//  1. $XDG_CONFIG_HOME/fourbysix/config.yaml when XDG_CONFIG_HOME is an
+//     absolute path (the XDG spec says to ignore relative values);
+//  2. ~/.config/fourbysix/config.yaml when that file exists, so macOS and
+//     Windows users who keep dotfiles in ~/.config are found without
+//     setting XDG_CONFIG_HOME;
+//  3. os.UserConfigDir()/fourbysix/config.yaml, the platform's native dir
+//     (~/Library/Application Support on macOS, %AppData% on Windows).
+//
+// --init writes to whichever path this returns.
 func UserConfigPath() string {
-	dir, err := os.UserConfigDir()
-	if err != nil {
-		// Fall back to $HOME/.config so the tool still works where
-		// UserConfigDir is unavailable.
-		dir = filepath.Join(os.Getenv("HOME"), ".config")
+	if xdg := os.Getenv("XDG_CONFIG_HOME"); filepath.IsAbs(xdg) {
+		return appConfig(xdg)
 	}
+	home, homeErr := os.UserHomeDir()
+	if homeErr == nil {
+		dotConfig := appConfig(filepath.Join(home, ".config"))
+		if _, err := os.Stat(dotConfig); err == nil {
+			return dotConfig
+		}
+	}
+	if dir, err := os.UserConfigDir(); err == nil {
+		return appConfig(dir)
+	}
+	// UserConfigDir is unavailable (no HOME/AppData); fall back to
+	// ~/.config so the tool still works.
+	return appConfig(filepath.Join(home, ".config"))
+}
+
+func appConfig(dir string) string {
 	return filepath.Join(dir, "fourbysix", "config.yaml")
 }
 

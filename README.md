@@ -13,6 +13,17 @@ fourbysix labels.pdf --rotation best-fit --dpi 150
 fourbysix "Online Return Center.pdf" --split --rotation best-fit --print
 ```
 
+## Install
+
+With Go 1.26 or newer:
+
+```sh
+go install github.com/zzwong/fourbysix/cmd/fourbysix@latest
+```
+
+This puts `fourbysix` in `$(go env GOPATH)/bin`. Runs on macOS, Linux and
+Windows; `--print` needs CUPS `lp`, so it works on macOS and Linux only.
+
 ## Build
 
 ```sh
@@ -36,6 +47,23 @@ system libpdfium is required.
 
 Whole-page mode emits one label per input page. Blank pages become blank
 labels.
+
+## eBay return labels
+
+eBay's printable return label is already one label per page: the FedEx or
+USPS label on page 1, the packing slip on page 2. Use whole-page mode, which
+is the default:
+
+```sh
+fourbysix "ebay.com_rt_ReturnDetails_returnId=….pdf" --print
+#   Page 1/2: 4.1x5.8 in → scale 99% → 4.0x5.7 in    (shipping label)
+#   Page 2/2: 6.1x2.9 in → scale 66% → 4.0x1.9 in    (packing slip)
+```
+
+Don't use `--split` here. The carrier label is drawn as text between ruled
+lines, which split mode cannot see as one label; it keeps only the barcode
+and skips the text-only packing slip. When split mode keeps under a third of
+a page's content, it prints a hint to rerun without `--split`.
 
 ## Split mode (several labels per page)
 
@@ -71,7 +99,7 @@ Create a user config with `--init`:
 
 ```sh
 fourbysix --init
-# → creates $XDG_CONFIG_HOME/fourbysix/config.yaml
+# → creates the user config (path below)
 ```
 
 Edit that file for your defaults. `config.example.yaml` in this repository is
@@ -90,7 +118,13 @@ output_suffix: _label
 Load order (later overrides earlier):
 
 1. Built-in defaults
-2. `$XDG_CONFIG_HOME/fourbysix/config.yaml` (or `os.UserConfigDir()`)
+2. The user config, the first of:
+   - `$XDG_CONFIG_HOME/fourbysix/config.yaml`, when `XDG_CONFIG_HOME` is set
+     to an absolute path;
+   - `~/.config/fourbysix/config.yaml`, when that file exists;
+   - the platform config dir: `~/Library/Application Support/fourbysix/`
+     on macOS, `~/.config/fourbysix/` on Linux, `%AppData%\fourbysix\` on
+     Windows.
 3. `--config PATH`
 4. CLI flags
 
@@ -175,3 +209,7 @@ platforms do not have that atomicity guarantee and have not been qualified here.
 There is no fsync or power-loss/crash durability guarantee. Concurrent filesystem
 changes, especially adversarial directory or link swaps, are outside this local
 CLI's guarantee. Successful-save output and printing occur only after rename.
+
+## License
+
+[MIT](LICENSE)
