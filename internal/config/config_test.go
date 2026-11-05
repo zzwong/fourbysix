@@ -74,9 +74,58 @@ func TestValidateLabelSize(t *testing.T) {
 	}
 }
 
+// setHome points every platform's home lookup at dir.
+func setHome(t *testing.T, dir string) {
+	t.Helper()
+	t.Setenv("HOME", dir)
+	t.Setenv("USERPROFILE", dir)
+	t.Setenv("AppData", filepath.Join(dir, "AppData"))
+}
+
+func nativeConfigPath(t *testing.T) string {
+	t.Helper()
+	dir, err := os.UserConfigDir()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return filepath.Join(dir, "fourbysix", "config.yaml")
+}
+
 func TestUserConfigPathHonorsXDG(t *testing.T) {
-	t.Setenv("XDG_CONFIG_HOME", "/tmp/fbs-xdg")
-	if got, want := UserConfigPath(), "/tmp/fbs-xdg/fourbysix/config.yaml"; got != want {
+	home := t.TempDir()
+	setHome(t, home)
+	xdg := filepath.Join(home, "xdg")
+	t.Setenv("XDG_CONFIG_HOME", xdg)
+	// XDG wins even over an existing ~/.config file.
+	writeFile(t, filepath.Join(home, ".config", "fourbysix", "config.yaml"), "dpi: 203\n")
+	if got, want := UserConfigPath(), filepath.Join(xdg, "fourbysix", "config.yaml"); got != want {
+		t.Fatalf("UserConfigPath() = %q, want %q", got, want)
+	}
+}
+
+func TestUserConfigPathIgnoresRelativeXDG(t *testing.T) {
+	setHome(t, t.TempDir())
+	t.Setenv("XDG_CONFIG_HOME", "relative/dir")
+	if got, want := UserConfigPath(), nativeConfigPath(t); got != want {
+		t.Fatalf("UserConfigPath() = %q, want %q", got, want)
+	}
+}
+
+func TestUserConfigPathFindsExistingDotConfig(t *testing.T) {
+	home := t.TempDir()
+	setHome(t, home)
+	t.Setenv("XDG_CONFIG_HOME", "")
+	want := filepath.Join(home, ".config", "fourbysix", "config.yaml")
+	writeFile(t, want, "dpi: 203\n")
+	if got := UserConfigPath(); got != want {
+		t.Fatalf("UserConfigPath() = %q, want %q", got, want)
+	}
+}
+
+func TestUserConfigPathDefaultsToNativeDir(t *testing.T) {
+	setHome(t, t.TempDir())
+	t.Setenv("XDG_CONFIG_HOME", "")
+	if got, want := UserConfigPath(), nativeConfigPath(t); got != want {
 		t.Fatalf("UserConfigPath() = %q, want %q", got, want)
 	}
 }

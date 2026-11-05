@@ -23,9 +23,12 @@ test:
 	go test ./...
 
 # static verifies the binary really is statically linked. ldd exits non-zero
-# for a static binary, hence the explicit message match.
+# for a static binary, hence the explicit message match. Only Linux has a
+# fully static Go binary: on macOS Go always links libSystem, so the check
+# is skipped there.
 static:
-	@out="$$(ldd $(BIN) 2>&1 || true)"; \
+	@if [ "$$(uname -s)" != Linux ]; then echo "$(BIN): static check skipped (Linux only)"; exit 0; fi; \
+	out="$$(ldd $(BIN) 2>&1 || true)"; \
 	case "$$out" in \
 		*"not a dynamic executable"*|*"statically linked"*) echo "$(BIN): static" ;; \
 		*) echo "$(BIN): not static:"; echo "$$out"; exit 1 ;; \

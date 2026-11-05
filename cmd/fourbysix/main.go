@@ -260,6 +260,7 @@ func runWithSave(args []string, stdout, stderr io.Writer, save func(string, func
 	}
 
 	var labels []pdfwrite.Page
+	var underSplit []string // pages where --split kept little of the content
 	report := func(tag string, res *place.Result) {
 		if quiet {
 			return
@@ -317,6 +318,16 @@ func runWithSave(args []string, stdout, stderr io.Writer, save func(string, func
 		if len(regions) == 0 && !quiet {
 			fmt.Fprintf(stdout, "  %s: no labels found, skipped\n", tag)
 		}
+		if len(regions) > 0 && !quiet {
+			low, err := doc.Render(i, 72, nil)
+			if err != nil {
+				fmt.Fprintf(stderr, "Error: %v\n", err)
+				return 1
+			}
+			if bbox, ok := layout.ContentBBox(low, 250); ok && coversLittle(regions, bbox) {
+				underSplit = append(underSplit, strconv.Itoa(i+1))
+			}
+		}
 		for n, region := range regions {
 			res, err := place.Region(doc, i, region, placeCfg)
 			if err != nil {
@@ -343,6 +354,11 @@ func runWithSave(args []string, stdout, stderr io.Writer, save func(string, func
 
 	if !quiet {
 		fmt.Fprintf(stdout, "\nSaved: %s\n", outputPath)
+	}
+	if len(underSplit) > 0 {
+		fmt.Fprintf(stderr, "Hint: --split kept under a third of the content on page %s. "+
+			"PDFs with one label per page, such as eBay's, print whole without --split.\n",
+			strings.Join(underSplit, ", "))
 	}
 
 	if printIt {
@@ -418,4 +434,17 @@ func validRotation(s string) bool {
 		return true
 	}
 	return false
+}
+
+// coversLittle reports whether the split labels hold under a third of the
+// page's printed content. That happens when a label is drawn mostly as text
+// between rules (eBay's FedEx and USPS labels), which split mode cannot see
+// as one label, so only a barcode or logo survives the crop.
+func coversLittle(regions []layout.Rect, content layout.Rect) bool {
+	var covered float64
+	for _, r := range regions {
+		c := r.Clip(content)
+		covered += max(0, c.Width()) * max(0, c.Height())
+	}
+	return covered < content.Width()*content.Height()/3
 }
