@@ -105,8 +105,12 @@ func TestUserConfigPathHonorsXDG(t *testing.T) {
 
 func TestUserConfigPathIgnoresRelativeXDG(t *testing.T) {
 	setHome(t, t.TempDir())
+	// The result must match a run with XDG_CONFIG_HOME unset. Compute it
+	// first: on Linux os.UserConfigDir errors on a relative value.
+	t.Setenv("XDG_CONFIG_HOME", "")
+	want := nativeConfigPath(t)
 	t.Setenv("XDG_CONFIG_HOME", "relative/dir")
-	if got, want := UserConfigPath(), nativeConfigPath(t); got != want {
+	if got := UserConfigPath(); got != want {
 		t.Fatalf("UserConfigPath() = %q, want %q", got, want)
 	}
 }
