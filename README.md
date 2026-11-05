@@ -1,5 +1,11 @@
 # fourbysix
 
+[![check](https://github.com/zzwong/fourbysix/actions/workflows/check.yml/badge.svg)](https://github.com/zzwong/fourbysix/actions/workflows/check.yml)
+[![release](https://img.shields.io/github/v/release/zzwong/fourbysix)](https://github.com/zzwong/fourbysix/releases/latest)
+[![Go Reference](https://pkg.go.dev/badge/github.com/zzwong/fourbysix.svg)](https://pkg.go.dev/github.com/zzwong/fourbysix)
+[![Go Report Card](https://goreportcard.com/badge/github.com/zzwong/fourbysix)](https://goreportcard.com/report/github.com/zzwong/fourbysix)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
 Crop shipping and return-label PDFs onto thermal label pages (default 4x6 in)
 with automatic content detection, rotation, and scaling. `--split` pulls
 several labels off one page, such as the UPS label, lithium battery label and
@@ -15,7 +21,9 @@ fourbysix "Online Return Center.pdf" --split --rotation best-fit --print
 
 ## Install
 
-With Go 1.26 or newer:
+Download a binary for macOS, Linux or Windows from the
+[latest release](https://github.com/zzwong/fourbysix/releases/latest), or
+build it with Go 1.26 or newer:
 
 ```sh
 go install github.com/zzwong/fourbysix/cmd/fourbysix@latest
