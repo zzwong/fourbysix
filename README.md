@@ -28,7 +28,7 @@ brew install zzwong/tap/fourbysix
 
 Or download a binary for macOS, Linux or Windows from the
 [latest release](https://github.com/zzwong/fourbysix/releases/latest), or
-build it with Go 1.26 or newer:
+build it with Go 1.27 or newer:
 
 ```sh
 go install github.com/zzwong/fourbysix/cmd/fourbysix@latest
