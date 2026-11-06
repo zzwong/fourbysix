@@ -2,7 +2,7 @@
 
 BIN := bin/fourbysix
 
-.PHONY: build check fmt vet test static
+.PHONY: build check fmt vet test static lint
 
 # build produces the single static binary.
 build:
@@ -33,3 +33,8 @@ static:
 		*"not a dynamic executable"*|*"statically linked"*) echo "$(BIN): static" ;; \
 		*) echo "$(BIN): not static:"; echo "$$out"; exit 1 ;; \
 	esac
+
+# lint runs golangci-lint with .golangci.yml. It is not part of check so
+# contributors without golangci-lint can still run the core gate; CI runs both.
+lint:
+	golangci-lint run ./...

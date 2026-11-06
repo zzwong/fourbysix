@@ -92,7 +92,7 @@ func Open(data []byte) (*Doc, error) {
 	}
 	opened, err := inst.OpenDocument(&requests.OpenDocument{File: &data})
 	if err != nil {
-		inst.Close()
+		_ = inst.Close() // already failing; the open error is the one to report
 		return nil, fmt.Errorf("open document: %w", err)
 	}
 	return &Doc{inst: inst, doc: opened.Document}, nil

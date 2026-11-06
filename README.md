@@ -3,7 +3,6 @@
 [![check](https://github.com/zzwong/fourbysix/actions/workflows/check.yml/badge.svg)](https://github.com/zzwong/fourbysix/actions/workflows/check.yml)
 [![release](https://img.shields.io/github/v/release/zzwong/fourbysix)](https://github.com/zzwong/fourbysix/releases/latest)
 [![Go Reference](https://pkg.go.dev/badge/github.com/zzwong/fourbysix.svg)](https://pkg.go.dev/github.com/zzwong/fourbysix)
-[![Go Report Card](https://goreportcard.com/badge/github.com/zzwong/fourbysix)](https://goreportcard.com/report/github.com/zzwong/fourbysix)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 Crop shipping and return-label PDFs onto thermal label pages (default 4x6 in)
@@ -37,6 +36,7 @@ Windows; `--print` needs CUPS `lp`, so it works on macOS and Linux only.
 ```sh
 make build          # CGO_ENABLED=0 go build -trimpath -o bin/fourbysix ./cmd/fourbysix
 make check          # gofmt, go vet, go test, static build, static-linkage check
+make lint           # golangci-lint (install separately; CI runs it too)
 ```
 
 The result is a single static binary. PDF access goes through
