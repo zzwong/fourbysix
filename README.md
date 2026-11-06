@@ -20,7 +20,13 @@ fourbysix "Online Return Center.pdf" --split --rotation best-fit --print
 
 ## Install
 
-Download a binary for macOS, Linux or Windows from the
+With Homebrew on macOS or Linux:
+
+```sh
+brew install zzwong/tap/fourbysix
+```
+
+Or download a binary for macOS, Linux or Windows from the
 [latest release](https://github.com/zzwong/fourbysix/releases/latest), or
 build it with Go 1.26 or newer:
 

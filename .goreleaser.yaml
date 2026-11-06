@@ -37,3 +37,26 @@ changelog:
       - "^docs:"
       - "^test:"
       - "^ci:"
+
+homebrew_casks:
+  - name: fourbysix
+    binaries: [fourbysix]
+    homepage: https://github.com/zzwong/fourbysix
+    description: Crop shipping and return-label PDFs onto 4x6 thermal labels
+    license: MIT
+    directory: Casks
+    commit_author:
+      name: zzwong-tap-publisher[bot]
+      email: zzwong-tap-publisher[bot]@users.noreply.github.com
+    repository:
+      owner: zzwong
+      name: homebrew-tap
+      token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
+    # The binary is not signed or notarized, so macOS would quarantine it
+    # and refuse to run it. Clear the quarantine bit after install.
+    hooks:
+      post:
+        install_steps: |
+          on_macos do
+            run "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "{{ .StagedPath }}/fourbysix"]
+          end
