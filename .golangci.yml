@@ -1,0 +1,26 @@
+version: "2"
+
+linters:
+  settings:
+    errcheck:
+      exclude-functions:
+        # CLI output to stdout/stderr: a failed write has nowhere to be reported.
+        - fmt.Fprint
+        - fmt.Fprintf
+        - fmt.Fprintln
+        # Closing a read-only PDF frees pdfium memory and cannot lose data.
+        - (*github.com/zzwong/fourbysix/internal/pdfdoc.Doc).Close
+    staticcheck:
+      checks:
+        - all
+        # Keep page-range guards such as !(1 <= start && start <= end) as
+        # written; De Morgan's form reads worse.
+        - -QF1001
+        # Defaults golangci-lint also disables: package/identifier naming
+        # style and doc-comment format.
+        - -ST1000
+        - -ST1003
+        - -ST1016
+        - -ST1020
+        - -ST1021
+        - -ST1022

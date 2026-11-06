@@ -101,7 +101,7 @@ func runWithSave(args []string, stdout, stderr io.Writer, save func(string, func
 	fs.StringVar(&printer, "printer", "", "lp destination for --print")
 	fs.BoolVar(&showVer, "version", false, "Print the version and exit")
 
-	fs.ParseErrorsWhitelist.UnknownFlags = false
+	fs.ParseErrorsAllowlist.UnknownFlags = false
 	if err := fs.Parse(args); err != nil {
 		fmt.Fprint(stderr, usageText)
 		return 1

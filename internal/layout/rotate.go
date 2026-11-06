@@ -37,9 +37,5 @@ func ShouldRotate(contentW, contentH, labelW, labelH float64, policy string) boo
 
 	// auto: keep landscape content upright.
 	isLandscape := contentW > contentH*1.2
-	if isLandscape {
-		return false
-	}
-
-	return true
+	return !isLandscape
 }
