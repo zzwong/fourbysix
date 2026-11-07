@@ -45,6 +45,11 @@ homebrew_casks:
     description: Crop shipping and return-label PDFs onto 4x6 thermal labels
     license: MIT
     directory: Casks
+    # Go 1.27 requires macOS Ventura; keep the cask usable on Linux.
+    custom_block: |
+      on_macos do
+        depends_on macos: :ventura
+      end
     commit_author:
       name: zzwong-tap-publisher[bot]
       email: zzwong-tap-publisher[bot]@users.noreply.github.com
