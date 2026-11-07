@@ -20,6 +20,10 @@ fourbysix "Online Return Center.pdf" --split --rotation best-fit --print
 
 ## Install
 
+On macOS, v0.1.2 and builds from this source require macOS 13 (Ventura)
+or newer, following [Go 1.27's minimum](https://go.dev/doc/go1.27#darwin).
+Existing v0.1.1 release binaries are unchanged.
+
 With Homebrew on macOS or Linux:
 
 ```sh
