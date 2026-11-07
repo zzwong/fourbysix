@@ -77,6 +77,41 @@ class Contract(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     checker.check(text)
 
+    def test_pinned_generator_placeholders(self):
+        # GoReleaser replaces the snapshot version in archive URLs with Ruby's
+        # version interpolation, but leaves its Homebrew staged_path token.
+        generated = VALID.replace(
+            "fourbysix_0.1.3-SNAPSHOT-test_", "fourbysix_#{version}_"
+        ).replace(
+            '  binary "fourbysix"',
+            '  binary "fourbysix"\n'
+            '  postflight_steps do\n'
+            '    on_macos do\n'
+            '      run "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "{{staged_path}}/fourbysix"]\n'
+            '    end\n'
+            '  end'
+        )
+        checker.check(generated)
+        checker.check(generated.replace("/download/v0.1.3-SNAPSHOT-test/", "/download/v#{version}/"))
+        mutations = {
+            "interpolation_in_version": generated.replace('version "0.1.3-SNAPSHOT-test"', 'version "#{version}"'),
+            "interpolation_in_description": generated.replace('  binary "fourbysix"', '  desc "#{version}"\n  binary "fourbysix"'),
+            "unknown_tag_interpolation": generated.replace("/download/v0.1.3-SNAPSHOT-test/", "/download/v#{other}/"),
+            "suffix_tag_interpolation": generated.replace("/download/v0.1.3-SNAPSHOT-test/", "/download/v#{version}-suffix/"),
+            "wrong_homebrew_token": generated.replace("{{staged_path}}", "{{appdir}}"),
+            "unexpanded_go_token": generated.replace("{{staged_path}}", "{{ .StagedPath }}"),
+            "token_in_version": generated.replace('version "0.1.3-SNAPSHOT-test"', 'version "{{staged_path}}"'),
+            "token_in_archive": generated.replace("#{version}", "{{staged_path}}"),
+            "wrong_install_target": generated.replace("{{staged_path}}/fourbysix", "{{staged_path}}/other"),
+            "wrong_url_interpolation": generated.replace("#{version}", "#{other}"),
+            "missing_url_interpolation_brace": generated.replace("#{version}", "#{version"),
+            "wrong_os_with_interpolation": generated.replace("_darwin_arm64", "_linux_arm64"),
+        }
+        for name, text in mutations.items():
+            with self.subTest(name=name):
+                with self.assertRaises(ValueError):
+                    checker.check(text)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -41,7 +41,20 @@ jobs:
         run: |
           set -euo pipefail
           isolated_home="$(mktemp -d)"
-          trap 'rm -rf "$isolated_home"' EXIT
+          cleanup() {
+            status=$?
+            trap - EXIT
+            # Go owns read-only module-cache directories; use its scoped cleaner.
+            cleanup_status=0
+            env -i PATH="$PATH" HOME="$isolated_home" GOPATH="$isolated_home/go" \
+              GOTOOLCHAIN=local go clean -modcache || cleanup_status=$?
+            rm -rf -- "$isolated_home" || cleanup_status=$?
+            if [ "$status" -ne 0 ]; then
+              exit "$status"
+            fi
+            exit "$cleanup_status"
+          }
+          trap cleanup EXIT
           # Do not forward runner credentials or saved GoReleaser configuration.
           env -i PATH="$PATH" HOME="$isolated_home" TMPDIR="$RUNNER_TEMP"             GOTOOLCHAIN=local GOPATH="$isolated_home/go" GOCACHE="$isolated_home/go-build"             bash --noprofile --norc -euo pipefail <<'SNAPSHOT'
           python3 scripts/test_snapshot_cask.py
