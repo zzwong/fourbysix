@@ -1,0 +1,54 @@
+name: snapshot-cask
+
+on:
+  pull_request:
+    paths:
+      - '.goreleaser.yaml'
+      - 'go.mod'
+      - 'go.sum'
+      - 'cmd/**'
+      - 'internal/**'
+      - '.github/workflows/snapshot-cask.yml'
+      - 'scripts/check-snapshot-cask.py'
+      - 'scripts/test_snapshot_cask.py'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: snapshot-cask-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  snapshot-cask:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: false
+      - uses: goreleaser/goreleaser-action@a4f02ab5355a589de60d917a659ce617ed19b3de # v7.3.0
+        with:
+          version: v2.20.0
+          install-only: true
+      - name: Check the generated cask without publishing
+        shell: bash
+        run: |
+          set -euo pipefail
+          isolated_home="$(mktemp -d)"
+          trap 'rm -rf "$isolated_home"' EXIT
+          # Do not forward runner credentials or saved GoReleaser configuration.
+          env -i PATH="$PATH" HOME="$isolated_home" TMPDIR="$RUNNER_TEMP"             GOTOOLCHAIN=local GOPATH="$isolated_home/go" GOCACHE="$isolated_home/go-build"             bash --noprofile --norc -euo pipefail <<'SNAPSHOT'
+          python3 scripts/test_snapshot_cask.py
+          goreleaser check
+          goreleaser release --snapshot --clean --skip=publish,announce --timeout=15m
+          cask=dist/homebrew/Casks/fourbysix.rb
+          python3 scripts/check-snapshot-cask.py "$cask"
+          # Syntax only: never load the cask or execute its post-install hook.
+          ruby -c "$cask"
+          SNAPSHOT
